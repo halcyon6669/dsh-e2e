@@ -633,7 +633,13 @@ await test('a passing case still shows what it saw', async () => {
   assert.match(textOf(historyTab), /History 1/, 'and says how many runs there are')
   historyTab.props.onClick()
   const withHistory = await settle(() => mainComponent({}))
-  const rows = elementsOf(withHistory).filter((node) => node.props && node.props.className === 'e2e-history-row')
+  // Not `=== 'e2e-history-row'`: the row of the run being shown also carries
+  // `is-active`, and an equality check here would report "no rows" for a page
+  // that is displaying exactly one. (This is the third time a modifier class
+  // has hidden a working component from this probe.)
+  const rows = elementsOf(withHistory).filter(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-history-row'),
+  )
   assert.equal(rows.length, 1, 'the past run is listed')
   rows[0].props.onClick()
   const detail = await settle(() => mainComponent({}))

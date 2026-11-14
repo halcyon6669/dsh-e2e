@@ -612,6 +612,57 @@ test('markdown escapes pipes so a table stays a table', () => {
   assert.match(text, /a\\\|b/)
 })
 
+test('markdown shows what the database looked like before and after', () => {
+  const report = sampleReport({ verdict: 'passed', failedChecks: [], checks: [], warnings: [] })
+  report.evidence.snapshots = [
+    {
+      index: 0,
+      database: 'iam',
+      sql: 'SELECT * FROM users WHERE username = ?',
+      before: [],
+      beforeCount: 0,
+      after: [{ username: 'e2e1', valid_state: 0 }],
+      afterCount: 1,
+      changed: true,
+    },
+  ]
+  const text = renderMarkdown(report)
+  assert.match(text, /## Database before and after/)
+  assert.match(text, /iam — changed \(0 → 1 rows\)/)
+  // Both halves have to be there: the "after" alone is what the assertion
+  // already said, and the whole point of the section is the comparison.
+  assert.match(text, /\*\*before\*\*/)
+  assert.match(text, /\*\*after\*\*/)
+  assert.match(text, /e2e1/)
+})
+
+test('a snapshot that never got an "after" is left out rather than shown empty', () => {
+  const report = sampleReport({ verdict: 'failed', failedChecks: [], checks: [], warnings: [] })
+  report.evidence.snapshots = [{ index: 0, database: 'iam', sql: 'SELECT 1', before: [], beforeCount: 0 }]
+  const text = renderMarkdown(report)
+  assert.ok(!/## Database before and after/.test(text), 'a half snapshot is not a comparison')
+})
+
+test('markdown says so when nothing changed', () => {
+  const report = sampleReport({ verdict: 'passed', failedChecks: [], checks: [], warnings: [] })
+  report.evidence.snapshots = [
+    {
+      index: 0,
+      database: 'iam',
+      sql: 'SELECT 1 FROM users',
+      before: [{ n: 1 }],
+      beforeCount: 1,
+      after: [{ n: 1 }],
+      afterCount: 1,
+      changed: false,
+    },
+  ]
+  const text = renderMarkdown(report)
+  // A case that passes without changing anything is not testing what its author
+  // thinks it is. The report has to be able to say that out loud.
+  assert.match(text, /iam — no change \(1 → 1 rows\)/)
+})
+
 test('summary is a short line, not the whole report', () => {
   const summary = renderSummary(sampleReport(), { reportPath: '/tmp/r.md' })
   assert.match(summary, /FAIL/)

@@ -121,9 +121,9 @@
 | 文件 | 行数 | 职责 | 关键设计决策 |
 |---|---|---|---|
 | `index.js` | 150 | 插件入口，`apply(ctx, config)` | 模块解析钩子给整棵依赖图加 generation，改任何 `src/*.js` 都不必重启 DSH |
-| `client.js` | 1985 | 浏览器半：项目表 + 侧栏入口 + 用例面板 | 纯手写 bundle，React 来自宿主模块表，见 §16 |
+| `client.js` | 3436 | 浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划 + 侧栏入口 | 纯手写 bundle，React 来自宿主模块表，见 §16 |
 | `src/host.js` | 306 | 组装、示例播种、`/status`、客户端半自检 | 面板首次打开不能是空目录，见 §16.1 |
-| `src/panel.js` | 893 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
+| `src/panel.js` | 941 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
 | `src/store.js` | 322 | 用例与报告的唯一磁盘入口 | 路径必须落在 root 内，见 §16.2 |
 | `src/projects.js` | 398 | 项目表：按 origin 归并 target、汇总最近结果与分组 | 不存储、只推导；见 §5.10 |
 | `src/plan.js` | 139 | 步骤描述、状态判定、组内结论 | 纯函数，Host 算一次浏览器不重算；见 §5.11 |
@@ -136,17 +136,17 @@
 | `src/registry.js` | 389 | target / 数据库注册表 | 支持 `from: db-mcp` 复用已存数据源，见 §5.7 |
 | `src/resolve.js` | 158 | 用例 + registry → 实际连接 | 三层合并，缺配置时列出可用名字 |
 | `src/guard.js` | 188 | 环境护栏 | 校验解析后的地址（见 §9） |
-| `src/runner.js` | 589 | 流水线编排 | `finally` 保证 teardown 与停服 |
+| `src/runner.js` | 641 | 流水线编排 | `finally` 保证 teardown 与停服 |
 | `src/service.js` | 271 | 启停服务、跟随日志 | 端口占用预检（见 §6.2） |
 | `src/idea.js` | 275 | IDEA MCP 客户端 | 手写 SSE + JSON-RPC，不引依赖 |
 | `src/http.js` | 137 | HTTP 客户端 | 用 `node:http` 而非 `fetch`（见 §4.2） |
 | `src/pg.js` | 455 | PostgreSQL 线协议 | 手写，含 SCRAM-SHA-256（见 §4.2） |
 | `src/db.js` | 149 | 数据库门面 | 强制只读断言 |
 | `src/assert.js` | 254 | 断言引擎 | 每条断言返回统一结构（见 §7.2） |
-| `src/report.js` | 306 | 报告渲染 | 双格式：JSON + Markdown |
+| `src/report.js` | 338 | 报告渲染 | 双格式：JSON + Markdown |
 | `src/yaml.js` + `vendor/js-yaml.mjs` | 43 + 104KB | YAML 解析与输出 | 内置 vendor，见 §4.2 |
 
-`index.js` 151 行、`client.js` 2814 行（浏览器半，手写 bundle，含样式）。合计约 **10,900 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
+`index.js` 151 行、`client.js` 3436 行（浏览器半，手写 bundle，含样式）。合计约 **11,300 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
 
 `client.js` 涨得最快，而它没有任何编译期检查：`node --check` 只看语法，看不见一个改了名却没跟着改的变量。这就是 `dev/render.test.mjs` 存在的原因（§17），也是为什么前端每加一个页面都要同时加渲染探针。
 
@@ -683,6 +683,44 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 
 **被拒的记录走同一个记录形状。** 第一版手写了一个对象字面量，`caseId` 填的是文件名——于是真机上批量跑出来两条 `refused`，列表上显示 `auth-register.yaml`，而每条正常记录显示 `REG-auth-register-confirm`。现在它经过 `newRunRecord()`，用 `error.path` 和 `error.loaded` 取真实身份（`prepareRun()` 抛错时把已加载的用例一起带出来，因为拒绝也要说清楚拒绝的是谁，而重新读文件只是第二次机会失败在别的原因上）。
 
+### 5.14 用例详情：一个页签回答一个问题
+
+点一行用例打开的是**读**的页面（`view === 'detail'`），按 `编辑` 才进 `view === 'plan'`。详情页的页签顺序是失败排查时的问题顺序，不是字段顺序：
+
+| 页签 | 回答的问题 | 数据来源 |
+|---|---|---|
+| 检查点 | 它到底检查了什么，哪条不成立 | `report.checks` |
+| 控制台 | 服务在这一次请求里说了什么 | `evidence.logs` |
+| 数据库 | 请求前后各是什么样 | `evidence.snapshots` |
+| 代码 | 这条用例是怎么写的 | 文件原文 |
+| 历史 | 它以前跑成什么样 | `GET /case` 一起下发的 `history` |
+
+**打开用例就加载最新报告**，而不是等读者点历史里的一条。否则一个跑过十二次的用例，详情页五个页签里四个是空的——那是在说谎。
+
+**`evidence.logs` 没有一行带 trace id 时要说出来。** 服务端没配 MDC 时插件会退回「请求开始之后的全部日志」，那些行可能混入无关流量。静默展示它们比不展示更糟：读者会以为那是这一次的证据。
+
+### 5.15 数据库前后对比：为什么断言要跑两次
+
+`expect.database` 原本只查一次（请求之后），报告里只有「查到了什么」。于是最常见的失败读起来是：
+
+```
+期望 1 行，实际 0 行
+```
+
+这句话是真的，但它不是诊断。同样的输出对应三种完全不同的原因：
+
+| 请求前 → 请求后 | 含义 | 该改什么 |
+|---|---|---|
+| `0 → 0` | 请求根本没写入 | 改服务或请求 |
+| `0 → 1` | 写入了，断言写错了 | 改断言 |
+| `1 → 1` | 这一行本来就在 | 改 setup：这条用例什么都没测 |
+
+所以每条数据库断言现在跑两次，两半成对写进 `evidence.snapshots`，`changed` 说明中间有没有变化，Markdown 报告里对应一节 `## Database before and after`。
+
+`1 → 1` 是这里唯一**不会失败**的情况：用例是绿的，而它什么都没证明。只有把前后摆在一起才看得见它。
+
+实现上前后两半存在两个地方（`evidence.database` 是终态、`evidence.snapshots` 是配对），因为 `assertDatabase` 需要的是终态。配对发生在第 7 步的同一个循环里，用 `for (const [index, expectation] of ...entries())` 按序号对齐——**第一版这里漏了 `index` 的解构**，`node --check` 和全部单测都通过，只有真机跑一次才炸出 `fatal: ReferenceError: index is not defined`（见 §11.14）。
+
 ---
 
 ## 6. 执行流水线
@@ -708,6 +746,8 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 ```
 
 `resolve` 在 guard 之前，这个顺序是必须的：用例里已经没有地址了，**护栏能检查的唯一地址是解析出来的那个**。先解析再检查，检查的才是真正会被拨号的目标。
+
+第 12 步（`database.asserted`）每条数据库断言其实执行了**两次查询**：一次在第 7 步之后、请求之前（`snapshot`），一次在请求之后。两次成对写进 `evidence.snapshots`，理由见 §5.15——一次查询只能告诉你「断言成不成立」，两次才能告诉你「这条用例到底改动了什么」。
 
 ### 6.1 为什么先启服务再连数据库
 
@@ -1115,6 +1155,39 @@ assert.equal(icon.props.width, 20)
 
 教训写在 README 里的一句话：**注册进 slot 的组件也是组件，也要被渲染过一次才算测过。** 「注册成功了」和「渲染得出来」是两件事，而只有后者是用户能看见的。
 
+### 11.14 同一个未声明标识符，在服务端又发生了一次
+
+侧栏那个 `size`（§11.13）之后，同类 bug 在 `src/runner.js` 里又长了出来。
+
+第 7 步的数据库断言循环被改成两处：一处要在请求前查一次（存 `evidence.snapshots`），一处要在请求后查一次（存 `evidence.database`）。改的时候只给其中一处加了序号：
+
+```js
+for (const [index, expectation] of definition.expect.database.entries()) {   // 前
+  …
+}
+for (const expectation of definition.expect.database) {                       // 后
+  …
+  const snapshot = evidence.snapshots.find((item) => item.index === index)    // index 没声明
+}
+```
+
+结果：`node --check` 通过，十一套探针全绿，`npm test` exit 0。真机跑一条用例，报告里出现：
+
+```
+fatal: ReferenceError: index is not defined
+```
+
+`checks: 3` 全是 `ok: true`、`failedChecks: []`，而 `verdict: failed`——一条用例同时"所有断言都通过了"和"失败了"，因为它在断言跑完之后、报告收尾之前抛了异常。
+
+两件事值得记：
+
+1. **单测没抓到是因为没有任何单测真的跑过第 7 步。** `assertDatabase` 有单测（它是个纯函数），`runCase` 没有——跑它需要 IDE、服务和数据库。这类"只有在真机上才走到的代码"是单测覆盖率的盲区，不是单测写少了。
+2. **`dev/scope.test.mjs` 的第一版也抓不到它。** 那版问的是「这个名字在这个文件里任何地方声明过吗」，而 `index` 在别处（另一个函数里）确实声明过。改成按作用域解析之后，它立刻报出 `src/runner.js: line 395: index`。
+
+所以这个探针现在覆盖的不只是浏览器半：`client.js`、`index.js`、`src/*.js` 全部在检查范围内，并且它自己带两条反向测试（兄弟作用域的声明必须不可见、闭包里的必须可见），防止它松到永远通过。
+
+> 一个只抓得到你已经修完的 bug 的检查，是装饰。
+
 ---
 
 ## 12. 真机验证记录
@@ -1333,7 +1406,62 @@ POST /run-all {"files":["auth-register.yaml"],"allowWrites":true}
      "checks":9,"reportPath":"…\\run-2026-11-14T16-21-45-566Z-8136e5__REG-auth-register-confirm.md"}]}
 ```
 
+### 12.11 用例详情：历史、页签、前后对比的真机验证
+
+`GET /case?file=auth-register.yaml` 现在一起下发历史：
+
+```
+caseId=REG-auth-register-confirm derived=True endpoint=POST /auth/register
+history=3
+  passed  2026-11-14T16:21:45.566Z  checks=9
+  passed  2026-11-14T10:31:47.259Z  checks=9
+  passed  2026-11-14T10:31:08.348Z  checks=9
+```
+
+点开最新那份报告（`GET /report?path=…&format=json`）：
+
+```
+verdict=passed checks=9 steps=10
+request = POST https://127.0.0.1:8443/auth/register
+response = 500
+checks   = 9 条全 ok
+```
+
+`response=500` 而九条断言全通过不是矛盾——这条用例断言的是「注册返回 5xx 并且两张表都写入了」，因为被测项目在 SMTP 连不上时会抛 `MailSendException`。它恰好是这个工具存在的理由：**响应码失败，但数据落库成功，故障点被精确定位到邮件环节**。
+
+加上前后对比之后重跑（`POST /run-all {"files":["auth-register.yaml"],"allowWrites":true}`）：
+
+```
+verdict=passed checks=9 failed=0
+snapshots: 2
+  db=default 0 -> 1 changed=true beforeRows=0 afterRows=1
+  db=default 0 -> 1 changed=true beforeRows=0 afterRows=1
+```
+
+Markdown 报告里对应的一节：
+
+```markdown
+## Database before and after
+
+### default — changed (0 → 1 rows)
+
+SELECT username, valid_state, role FROM users WHERE username = 'e2edcc6cf3cd27d757e'
+
+**before**
+
+_no rows_
+
+**after**
+
+| username | valid_state | role |
+| --- | --- | --- |
+| e2edcc6cf3cd27d757e | 0 | USER |
+```
+
+**这一节的存在本身抓到过一个真 bug**：加完前后对比后第一次真机运行，报告是 `verdict: failed`、`checks: 3` 全 `ok`、`failedChecks: []`、`fatal: ReferenceError: index is not defined`。一条用例同时"全部断言通过"和"失败"，因为第 7 步的第二个循环读了一个自己没声明的 `index`（详见 §11.14）。修完后同一份报告变成 `passed / 9 checks / 2 snapshots`。
+
 ---
+
 
 ## 13. 工具接口
 
@@ -1443,7 +1571,7 @@ POST /run-all {"files":["auth-register.yaml"],"allowWrites":true}
 | GET | `/status` | 插件状态、工具名、用例目录、`client.registered` |
 | GET | `/bootstrap` | 一次拿全：用例（含 `groups`）、registry、报告、IDE 设置 |
 | GET | `/cases` | 用例列表 |
-| GET | `/case?file=` | 读一个用例（含原始 YAML 与四个描述字段） |
+| GET | `/case?file=` | 读一个用例（含原始 YAML、四个描述字段、表单初值，以及 `history`——这个用例在磁盘上的报告清单，见 §5.14） |
 | POST | `/case` | 保存（先写临时文件校验，见 §16.2；无 `caseId` 时自动分配，见 §5.9） |
 | DELETE | `/case?file=` | 删除 |
 | POST | `/next-case-id` | 查某个接口的下一个空闲编号（面板在保存前就能显示它） |
@@ -1475,7 +1603,7 @@ POST /run-all {"files":["auth-register.yaml"],"allowWrites":true}
 ```
 dsh-e2e/
 ├── index.js                 插件入口（inject: webServer）+ 热重载钩子
-├── client.js                浏览器半：项目表 + 用例清单 + 编辑测试计划
+├── client.js                浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划
 ├── package.json             bundle 元数据（含 dsh.client 段）
 ├── cordis.patch.yml         插入到宿主插件列表
 ├── icon.svg                 面板图标
@@ -1687,3 +1815,9 @@ the case contains INSERT/UPDATE/DELETE statements but database writes are disabl
 > **能算一次就不要算两次。**
 
 状态在 Host 算（§5.11）、分组在 Host 算、`/bootstrap` 带 `groups`（§13.1）。浏览器不重算的理由不是性能：推导两遍，总有一天推得不一样，那时你会有两个页面显示同一批用例的两个数字，而没有任何办法判断哪个对。
+
+最后一条是关于**证据**的，只有一处，但它是这个工具最贵的一条：
+
+> **只记录结果不算证据，能对比才算。**
+
+「期望 1 行，实际 0 行」是一个结论，不是一个解释。同样的结论对应三种完全不同的修法（改服务、改断言、改 setup），而区分它们的唯一信息是**请求之前是什么样**——所以每条数据库断言跑两次（§5.15）。这条原则的一般形式是：证据要能让读者自己得出你得到的结论，而不是只能选择相信它。

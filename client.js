@@ -1230,9 +1230,9 @@ window.__ModuleLoader__.load({
       const [tab, setTab] = React.useState('checks')
       const definition = selected ? selected.definition : null
       const latest = (history && history[0]) || null
-      // What to show under "Output": the run the reader just opened, or — if they
-      // have not opened one — the most recent run on record. A detail page with an
-      // empty output section on a case that has run twelve times is a lie.
+      // The run the reader is looking at. Opening a case loads its newest report,
+      // so this is almost always set — the tabs would otherwise all be empty on a
+      // case that has run twelve times, which is a lie the page cannot afford.
       const shown = historyRun || null
       const evidence = shown ? (shown.report && shown.report.evidence) || null : null
       const checks = shown ? (shown.report && shown.report.checks) || [] : []
@@ -1958,6 +1958,12 @@ window.__ModuleLoader__.load({
           const fields = (data.definition && data.definition.fields) || null
           setDraftFields(fields ? { ...fields } : null)
           setBaseFields(fields ? { ...fields } : null)
+          // Open the newest report straight away. The detail page's tabs are the
+          // questions a run raises — what did it check, what did the console say,
+          // what changed in the database — and every one of them is answered by
+          // the run that just happened, not by one the reader has to go find.
+          const newest = data.history && data.history[0]
+          if (newest) await openHistoryRun(newest.path)
         } catch (error) {
           setNotice({ isError: true, message: error.message })
         }

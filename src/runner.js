@@ -368,7 +368,7 @@ export async function runCase(definition, options = {}) {
     }
 
     // 7. Database terminal state, per named database.
-    for (const expectation of definition.expect.database) {
+    for (const [index, expectation] of definition.expect.database.entries()) {
       const target = dbFor(expectation.database)
       if (!target) {
         checks.push({

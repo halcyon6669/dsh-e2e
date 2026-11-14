@@ -185,6 +185,38 @@ export function renderMarkdown(report) {
     }
   }
 
+  // The before/after pair, next to the assertion it explains. "expected 1 row,
+  // got 0" is a verdict; "0 before, 0 after" is a diagnosis, and the Markdown
+  // report is what people read weeks later when they ask why.
+  const snapshots = (evidence.snapshots || []).filter((item) => item.changed !== undefined)
+  if (snapshots.length > 0) {
+    lines.push('')
+    lines.push('## Database before and after')
+    lines.push('')
+    for (const item of snapshots) {
+      const verdict = item.changed ? 'changed' : 'no change'
+      lines.push(`### ${item.database} — ${verdict} (${item.beforeCount} → ${item.afterCount} rows)`)
+      lines.push('')
+      lines.push('```sql')
+      lines.push(item.sql)
+      lines.push('```')
+      for (const [label, rows] of [
+        ['before', item.before],
+        ['after', item.after],
+      ]) {
+        lines.push('')
+        lines.push(`**${label}**`)
+        lines.push('')
+        if (!Array.isArray(rows) || rows.length === 0) {
+          lines.push('_no rows_')
+        } else {
+          lines.push(rowsToTable(rows))
+        }
+      }
+      lines.push('')
+    }
+  }
+
   if (report.teardown) {
     lines.push('')
     lines.push('## Teardown')
