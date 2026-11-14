@@ -1,0 +1,4 @@
+# Bundle patch layer: the row loads this package's main entry as the Host half.
+- insert:
+    - id: e2e
+      name: dsh-e2e

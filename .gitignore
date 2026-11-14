@@ -1,0 +1,22 @@
+# Runtime output. Reports belong next to the machine that ran them, not in the
+# repository: they carry host names, ports and captured response bodies.
+reports/
+*.log
+
+# Nothing here is built, but a stray install would be noise.
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# Scratch files the probes write and delete; anything left over was a crash.
+dev/_*.mjs
+dev/.reload-state/
+*.tmp-*
+*.check-*
+
+# Editors and the OS.
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.swp

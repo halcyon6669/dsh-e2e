@@ -1,0 +1,79 @@
+# 注册 → 确认验证码 → 用户激活
+#
+# 注意：这个文件里没有 host、没有端口、没有密码。数据库只按名字引用
+# （e2e.registry.yml 里的 `iam`），所以它可以安全地复制给同事、贴进工单、提交进仓库。
+
+id: auth-register-confirm
+title: 注册后确认验证码，用户状态应被激活
+description: |
+  在真实服务、真实 PostgreSQL 上验证注册与激活链路。
+
+  POST /auth/register 创建用户并写入一条验证码；POST /auth/confirmCode
+  校验验证码并把 users.valid_state 从 '0' 改成 '1'、codes.valid 从 '1' 改成 '0'。
+
+  注意 register 当前返回 500：AuthApplication.createUser 先写库再发邮件，
+  而 SMTP（smtp.168.com:465）连不上，MailSendException 冒到全局异常处理器。
+  这是被测项目已知的缺陷，与数据库无关，所以这里断言 500 并同时断言
+  「两表都写入了」——这正是本工具的价值：响应码失败，但数据落库成功，
+  说明失败发生在写库之后，故障点被精确定位到邮件环节。
+
+tags: [auth, database, regression]
+
+env:
+  # 指向 e2e.registry.yml 里的目标：运行配置、服务地址、是否信任自签证书都在那边。
+  target: record-local
+
+  databases:
+    # 只写名字 + 要读的 schema。连接信息在 registry 里。
+    default:
+      name: iam
+      schema: public
+
+setup:
+  sql:
+    - DELETE FROM codes WHERE username = '${user.name}'
+    - DELETE FROM users WHERE username = '${user.name}'
+
+request:
+  variables:
+    user.name: e2e${random.hex}
+  method: POST
+  path: /auth/register
+  headers:
+    Content-Type: application/json
+  json:
+    username: ${user.name}
+    password: Passw0rd!2026
+    email: ${user.name}@example.test
+  timeoutMs: 30000
+
+expect:
+  response:
+    status: 500
+    body_contains: register failed
+
+  database:
+    - database: default
+      description: 注册应在 users 落一行未激活用户
+      sql: SELECT username, valid_state, role FROM users WHERE username = '${user.name}'
+      rowCount: 1
+      rows:
+        - path: '[0].valid_state'
+          equals: '0'
+        - path: '[0].role'
+          equals: USER
+
+    - database: default
+      description: 注册应落一条有效验证码（6 位）
+      sql: SELECT code, valid FROM codes WHERE username = '${user.name}'
+      rowCount: 1
+      rows:
+        - path: '[0].valid'
+          equals: '1'
+        - path: '[0].code'
+          matches: '^\d{6}$'
+
+teardown:
+  sql:
+    - DELETE FROM codes WHERE username = '${user.name}'
+    - DELETE FROM users WHERE username = '${user.name}'

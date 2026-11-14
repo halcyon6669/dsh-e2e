@@ -1,0 +1,69 @@
+{
+  "name": "dsh-e2e",
+  "version": "0.6.0",
+  "description": "DSH plugin: run a real end-to-end case against a real service - start it through its IDE run configuration, send the real request, collect the log lines for its trace id, read the database terminal state, and hand back a report with the evidence.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "e2e",
+    "integration-testing",
+    "intellij",
+    "mcp"
+  ],
+  "license": "MIT",
+  "author": "dsh-e2e contributors",
+  "engines": {
+    "dsh": ">=0.2.0-rc.2"
+  },
+  "type": "module",
+  "icon": "icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src/*.js",
+    "vendor/js-yaml.mjs",
+    "locale/*.json",
+    "icon.svg",
+    "cordis.patch.yml",
+    "examples/*.yaml",
+    "examples/*.sql",
+    "docs/*.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node dev/unit.test.mjs && node dev/reload.test.mjs && node dev/client.test.mjs && node dev/resolve.test.mjs && node dev/registry.test.mjs && node dev/scan.test.mjs && node dev/scaffold.test.mjs && node dev/projects.test.mjs && node dev/render.test.mjs && node dev/edit.test.mjs && node dev/scope.test.mjs",
+    "test:unit": "node dev/unit.test.mjs",
+    "test:reload": "node dev/reload.test.mjs",
+    "test:client": "node dev/client.test.mjs",
+    "test:resolve": "node dev/resolve.test.mjs",
+    "test:registry": "node dev/registry.test.mjs",
+    "test:scan": "node dev/scan.test.mjs",
+    "test:scaffold": "node dev/scaffold.test.mjs",
+    "test:pg": "node dev/pg.test.mjs",
+    "test:idea": "node dev/idea.test.mjs",
+    "test:projects": "node dev/projects.test.mjs",
+    "test:render": "node dev/render.test.mjs",
+    "test:edit": "node dev/edit.test.mjs",
+    "test:scope": "node dev/scope.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}

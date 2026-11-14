@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "End-to-end tests",
+    "description": "Run a real case against a real service: start it through its IDE run configuration, send the real request, collect the log lines for its trace id, read the database terminal state, and get a report with the evidence."
+  }
+}

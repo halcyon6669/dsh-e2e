@@ -1,0 +1,99 @@
+# 确认验证码 → 用户激活 + 验证码作废
+#
+# 注意：这个文件里没有 host、没有端口、没有密码。数据库只按名字引用
+# （e2e.registry.yml 里的 `iam`），所以它可以安全地复制给同事、贴进工单、提交进仓库。
+
+id: auth-confirm-code
+title: 确认验证码应激活用户并使验证码失效
+description: |
+  注册之后用真实验证码调用 POST /auth/confirmCode，验证两件事同时发生：
+  users.valid_state 由 '0' 变 '1'，codes.valid 由 '1' 变 '0'。
+
+  验证码由服务随机生成、只存在于数据库里（SMTP 故障导致邮件没发出去，
+  但码已经落库），用例无法预知。所以这里用 setup.capture 把它读出来，
+  绑成变量 ${code.value}，主请求再引用它。
+
+  这个用例演示完整组合：setup.sql 清场 → setup.http 注册 → setup.capture
+  取码 → request 用码确认 → expect.database 断言两个表的终态。
+
+tags: [auth, database, state-transition]
+
+env:
+  # 指向 e2e.registry.yml 里的目标：运行配置、服务地址、是否信任自签证书都在那边。
+  target: record-local
+
+  databases:
+    # 只写名字 + 要读的 schema。连接信息在 registry 里。
+    default:
+      name: iam
+      schema: public
+
+setup:
+  sql:
+    - DELETE FROM codes WHERE username = '${user.name}'
+    - DELETE FROM users WHERE username = '${user.name}'
+
+  # 先注册，让服务自己生成验证码并写库。
+  # register 返回 500（SMTP 故障），但用户与验证码已落库。
+  # expect_status: 500 是必须显式声明的——准备请求默认把 >=400 当作错误，
+  # 这样「意料之外的失败」不会被当成正常准备步骤吞掉。
+  http:
+    - method: POST
+      path: /auth/register
+      headers:
+        Content-Type: application/json
+      json:
+        username: ${user.name}
+        password: Passw0rd!2026
+        email: ${user.name}@example.test
+      expect_status: 500
+      description: 注册以生成验证码（预期 500，因为邮件发送失败）
+
+  # 把服务生成的 6 位验证码读出来，绑成 code.value。
+  # column 省略时取结果集第一行的第一列。
+  capture:
+    - name: code.value
+      database: default
+      description: 取刚生成的验证码
+      sql: SELECT code FROM codes WHERE username = '${user.name}' AND valid = '1' ORDER BY update_time DESC
+      column: code
+      required: true
+
+request:
+  variables:
+    user.name: e2e${random.hex}
+  method: POST
+  path: /auth/confirmCode
+  headers:
+    Content-Type: application/json
+  json:
+    username: ${user.name}
+    code: ${code.value}
+  timeoutMs: 30000
+
+expect:
+  response:
+    status: 200
+    body_contains: code verify successfully
+
+  database:
+    - database: default
+      description: 用户应被激活
+      sql: SELECT valid_state FROM users WHERE username = '${user.name}'
+      rowCount: 1
+      rows:
+        - path: '[0].valid_state'
+          equals: '1'
+
+    - database: default
+      description: 验证码应被标记为已使用
+      sql: SELECT valid FROM codes WHERE username = '${user.name}'
+      rowCount: 1
+      rows:
+        - path: '[0].valid'
+          equals: '0'
+
+teardown:
+  sql:
+    - DELETE FROM codes WHERE username = '${user.name}'
+    - DELETE FROM users WHERE username = '${user.name}'

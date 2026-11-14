@@ -1,0 +1,15 @@
+# The repository stores LF; a Windows checkout gets CRLF in the working copy,
+# which is what every editor here expects. Without this, the same file shows up
+# as wholly rewritten in a diff the first time someone commits from another OS.
+* text=auto
+
+# These must never be rewritten: a YAML case that arrives with CRLF would make
+# every "expected one line" assertion in the probes fail for a reason that has
+# nothing to do with the code.
+*.yaml text eol=lf
+*.yml text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.drawio text eol=lf

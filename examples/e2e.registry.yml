@@ -1,0 +1,43 @@
+# dsh-e2e registry — 连接信息只写在这里，不写进用例。
+#
+# 用例文件（*.yaml）只写 `target: <名字>` 和 `database: {name: <名字>, schema: ...}`，
+# 这样用例可以随便复制、贴进 issue、提交进仓库，不会带走密码，也不会钉死某台机器的端口。
+#
+# 本文件放在用例目录里，插件会自动发现（同目录 → 上级目录 → 插件配置）。
+# 密码建议写成 ${env:NAME}，从环境变量取；${env:NAME:-兜底值} 可以带默认值。
+
+targets:
+  # IDE 运行配置 + 服务地址。换项目只改这一段。
+  record-local:
+    projectPath: E:/project/backend/Record
+    configurationName: RecordApplication
+    baseUrl: https://127.0.0.1:8443
+    insecureTls: true
+    startTimeoutMs: 120000
+
+  # 一个「服务已经在跑，只需要发请求」的目标：没有 configurationName，
+  # 用例里写 env.serviceRequired: false 就不会去启动它。
+  record-running:
+    baseUrl: https://127.0.0.1:8443
+    insecureTls: true
+
+databases:
+  # 直接写连接。密码优先取环境变量 IAM_PASSWORD，没设时用兜底值。
+  iam:
+    kind: postgresql
+    host: 127.0.0.1
+    port: 5432
+    database: iam_db
+    user: postgres
+    password: ${env:IAM_PASSWORD:-iam_postgres_password}
+    schema: public
+
+  # 复用 dsh-db-mcp 里已经注册的数据源：密码由那边加密保存，这里不出现任何凭据。
+  # `id` 必须是 dsh-db-mcp 面板里真实存在的数据源 id —— 把 gaussdb 换成你机器上的那个，
+  # 然后取消下面四行的注释。查 id 的办法：dsh-db-mcp 面板的列表，或者
+  # ~/.dsh/db-mcp/datasources.json 里的 "id" 字段。
+  #
+  # gauss:
+  #   from: db-mcp
+  #   id: gaussdb
+  #   schema: public
