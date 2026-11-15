@@ -194,6 +194,13 @@ export async function listProjects(options = {}) {
 
   const targetToKey = new Map()
   if (registry) {
+    // Two passes. A target that names a checkout is that checkout's project —
+    // two folders on one port are two projects, which is what a local machine
+    // full of half-started services actually looks like. A target that names no
+    // checkout is a second way into a service someone else's folder describes,
+    // so it joins the project that already claimed that origin.
+    const byOrigin = new Map()
+    const pending = []
     for (const name of Object.keys(registry.targets || {})) {
       let target
       try {
@@ -202,17 +209,18 @@ export async function listProjects(options = {}) {
         warnings.push(`target "${name}" was skipped: ${error.message}`)
         continue
       }
-      // Same service, one row: two targets that reach the same origin are two
-      // ways in, not two projects. Falling back to the checkout path covers the
-      // targets that declare one but no URL yet.
-      const key = originKey(target.baseUrl) || (target.projectPath ? projectKey(target.projectPath) : `target:${name}`)
+      if (!target.projectPath) {
+        pending.push([name, target])
+        continue
+      }
+      const key = projectKey(target.projectPath)
       if (!projects.has(key)) {
         projects.set(
           key,
           newProject({
             key,
             name: displayName({ projectPath: target.projectPath, baseUrl: target.baseUrl, fallback: name }),
-            projectPath: target.projectPath || null,
+            projectPath: target.projectPath,
             baseUrl: target.baseUrl || null,
             source: 'registry',
           }),
@@ -220,9 +228,35 @@ export async function listProjects(options = {}) {
       }
       const project = projects.get(key)
       project.targets.push(name)
-      // A later target may carry the checkout the first one lacked.
-      if (!project.projectPath && target.projectPath) project.projectPath = target.projectPath
       if (!project.baseUrl && target.baseUrl) project.baseUrl = target.baseUrl
+      targetToKey.set(name, key)
+      const origin = originKey(target.baseUrl)
+      if (origin) {
+        if (!byOrigin.has(origin)) byOrigin.set(origin, new Set())
+        byOrigin.get(origin).add(key)
+      }
+    }
+    for (const [name, target] of pending) {
+      const origin = originKey(target.baseUrl)
+      // Fold only when exactly one checkout claims that origin. Two checkouts on
+      // one port leave no way to say which of them this target means, and a guess
+      // would attach a case to the wrong folder; it keeps a row of its own, named
+      // by the address it does reach.
+      const claimants = (origin && byOrigin.get(origin)) || new Set()
+      const key = claimants.size === 1 ? [...claimants][0] : origin || `target:${name}`
+      if (!projects.has(key)) {
+        projects.set(
+          key,
+          newProject({
+            key,
+            name: displayName({ projectPath: null, baseUrl: target.baseUrl, fallback: name }),
+            projectPath: null,
+            baseUrl: target.baseUrl || null,
+            source: 'registry',
+          }),
+        )
+      }
+      projects.get(key).targets.push(name)
       targetToKey.set(name, key)
     }
   }

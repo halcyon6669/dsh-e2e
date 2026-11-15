@@ -759,16 +759,11 @@ export function createPanel({ ctx, config = {}, state }) {
       .toLowerCase()
       .replace(/[^a-z0-9-]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'project'
-    // A second project aimed at the same service is two registries describing
-    // one thing; the panel would show both rows for every run.
-    const existing = await loadRegistry({ config, caseDir: root, env: process.env })
-    for (const [existingName, target] of Object.entries(existing.targets)) {
-      let origin = null
-      try { origin = new URL(target.baseUrl || '').origin } catch { /* malformed stays theirs */ }
-      if (origin && origin === new URL(baseUrl).origin) {
-        throw new PanelError(`a project for ${origin} already exists: ${existingName}; one service, one project`, 422, { origin, existingName })
-      }
-    }
+    // The address is not policed. Two checkouts on one port is the normal shape
+    // of a local machine — the old port is still bound, the new project has not
+    // started yet — and refusing to register the second one only means the
+    // reader has to go stop something to write down a folder. What a project is
+    // identified by is its checkout, and that is decided in projects.js.
     const caseDir = join(root, slug)
     await mkdir(caseDir, { recursive: true })
     const written = await addTarget({

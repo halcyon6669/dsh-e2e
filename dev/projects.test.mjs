@@ -144,6 +144,55 @@ await test('a project with no cases yet still appears, as not run', async () => 
   assert.equal(lonely.projects[0].lastVerdict, null)
 })
 
+await test('two checkouts on one port are two projects', async () => {
+  // The port is not an identity: a local machine holds several checkouts and only
+  // one of them is running, so the same origin is the normal case, not a mistake.
+  const dir = join(root, 'shared-origin')
+  const sharedCases = join(dir, 'cases')
+  await mkdir(sharedCases, { recursive: true })
+  await mkdir(join(dir, 'one'), { recursive: true })
+  await mkdir(join(dir, 'two'), { recursive: true })
+  await writeFile(
+    join(sharedCases, 'e2e.registry.yml'),
+    `targets:
+  one:
+    projectPath: ${JSON.stringify(join(dir, 'one'))}
+    baseUrl: https://127.0.0.1:8443
+  two:
+    projectPath: ${JSON.stringify(join(dir, 'two'))}
+    baseUrl: https://127.0.0.1:8443
+`,
+    'utf8',
+  )
+  const shared = await listProjects({ ...options, config: { caseDir: sharedCases, reportDir: reports } })
+  assert.deepEqual(shared.projects.map((project) => project.name).sort(), ['one', 'two'])
+  assert.equal(shared.projects.find((project) => project.name === 'one').targets.length, 1)
+})
+
+await test('a second way into one checkout joins it', async () => {
+  // `app-local` starts the JVM, `app-running` hits it — same folder, same port,
+  // and one row, because the folder is what the row is about. This is the case
+  // the fold exists for.
+  const dir = join(root, 'second-way')
+  const cases = join(dir, 'cases')
+  await mkdir(cases, { recursive: true })
+  await mkdir(join(dir, 'checkout'), { recursive: true })
+  await writeFile(
+    join(cases, 'e2e.registry.yml'),
+    `targets:
+  app-local:
+    projectPath: ${JSON.stringify(join(dir, 'checkout'))}
+    baseUrl: https://127.0.0.1:8443
+  app-running:
+    baseUrl: https://127.0.0.1:8443
+`,
+    'utf8',
+  )
+  const listing = await listProjects({ ...options, config: { caseDir: cases, reportDir: reports } })
+  assert.equal(listing.projects.length, 1, 'one checkout is one project')
+  assert.deepEqual(listing.projects[0].targets.sort(), ['app-local', 'app-running'])
+})
+
 await test('the listing never changes what it describes', async () => {
   // A read that creates a directory would make the first load of the page
   // differ from every later one.

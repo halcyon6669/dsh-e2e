@@ -1234,15 +1234,15 @@ await testAsync('a comment above the targets block survives the insertion', asyn
   assert.match(after, /# the services we test against/, 'the comment was thrown away')
 })
 
-await testAsync('the same origin twice is one service described twice, and is refused', async () => {
-  await assert.rejects(
-    () => projectPanel.createProject({ name: 'shop-two', baseUrl: 'https://127.0.0.1:9443' }),
-    (error) => {
-      assert.ok(error instanceof PanelError)
-      assert.match(error.message, /already exists/)
-      return true
-    },
-  )
+await testAsync('two projects may share an origin: the folder is the project, not the port', async () => {
+  // A local machine holds several checkouts and only one of them is running, so
+  // the port a new project derives is very often the port an old project still
+  // claims. Refusing that would mean stopping a service to write down a folder.
+  const second = await projectPanel.createProject({ name: 'shop-two', baseUrl: 'https://127.0.0.1:9443' })
+  assert.equal(second.name, 'shop-two')
+  const registry = await readFile(second.registryFile, 'utf8')
+  assert.match(registry, /  shop:\n/, 'the first target survived')
+  assert.match(registry, /  shop-two:\n/, 'the second target was written')
 })
 
 await testAsync('a production-looking URL is refused at creation, with the runner\'s words', async () => {

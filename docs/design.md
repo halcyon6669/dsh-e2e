@@ -739,7 +739,7 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 1. **页签行与 SUITE 指示包进 `project ? ... : null`**。副标题整条删掉（连同它的字典键）——首页 header 只剩 logo 行与 `刷新`、`创建项目`。**创建项目表单占据的正是那条被撤掉的副标题条**：同一高度，现在在干活。表单四个输入 + 远程主机勾选 + 取消/创建。
 2. **创建项目 = 写 registry + 建目录，不是写数据库**。项目不是一行记录，它是用例里 `env.target` 指向的名字和 YAML 所在的目录。所以 `createProject` 做三件事：`auditBaseUrl`（**与运行时逐字同一套话**的地址审计——一个会让每条用例都失败的项目不该被轻易创建）、`addTarget`（registry 的**文本插入**，见 §5.7 的写入原则）、`mkdir` 用例目录。
 3. **slug 就是 target 名**。用户输入的名字里的空格由 slug 吸收（`my shop` → `my-shop`），显示名与 target 名是两个东西；表单的 placeholder 把这件事说在前面。
-4. **`addTarget` 是文本插入**：定位 `targets:` 段，在**最后一个 mapping 行**之后插入——第一版插在段尾，把下一个条目的前导注释切成了两半；修法是空行与注释可以路过但不推进插入点（注释通常属于它下面的条目）。重复 target 名、同 origin 的第二个项目都被拒绝（`one service, one project`）。没有 registry 文件时新建一个，文件头带上命名约定的注释。
+4. **`addTarget` 是文本插入**：定位 `targets:` 段，在**最后一个 mapping 行**之后插入——第一版插在段尾，把下一个条目的前导注释切成了两半；修法是空行与注释可以路过但不推进插入点（注释通常属于它下面的条目）。重复 target 名被拒绝；同 origin 的第二个项目**不拒绝**（本机常有多个 checkout 挤在一个端口上，一个是旧的还占着端口，一个是新的还没启动；拦下来只会逼人先去停服务才能登记目录）。项目身份由 checkout 决定：见 `listProjects` 的两趟归并——带 `projectPath` 的 target 各自成项目，不带 checkout 的 target 只有在该 origin 恰好被**一个** checkout 占用时才并入它，否则自成一档。没有 registry 文件时新建一个，文件头带上命名约定的注释。
 
 ### 5.15 数据库前后对比：为什么断言要跑两次
 
