@@ -3289,10 +3289,15 @@ window.__ModuleLoader__.load({
                 value: projectDraft.name,
                 onChange: (event) => setProjectDraft({ ...projectDraft, name: event.target.value }),
               }),
+              // A click on the path is a request for the file manager: typing a
+              // long Windows path by hand is the thing this field exists to
+              // avoid. The field still takes typed input, and the button beside
+              // it does the same thing for anyone who looks for a button.
               h('input', {
                 className: 'e2e-input e2e-project-field is-wide',
                 placeholder: t('field.projectPath'),
                 value: projectDraft.projectPath,
+                onClick: () => browseFolder(projectDraft.projectPath.trim() || null),
                 onChange: (event) => setProjectDraft({ ...projectDraft, projectPath: event.target.value }),
               }),
               h(Btn, { small: true, onClick: () => browseFolder(projectDraft.projectPath.trim() || null) }, t('action.browse')),
@@ -4760,6 +4765,7 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-method { flex: 0 0 46px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.04em; color: var(--dsw-alias-brand-primary); }
 .e2e-endpoint-path { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-create { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px 8px; }
+.e2e-project-field.is-wide { cursor: pointer; }
 .e2e-picker-backdrop { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dsw-alias-bg-base) 80%, transparent); }
 .e2e-picker { width: min(560px, 90vw); max-height: 70vh; display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); box-shadow: 0 12px 32px color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent); }
 .e2e-picker-path { font-size: 11.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

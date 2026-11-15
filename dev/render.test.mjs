@@ -547,6 +547,12 @@ await test('the landing page offers to create a project, and the form appears in
       textOf(node).trim() === 'Create',
   )
   assert.ok(submit, 'the form has its own create button')
+  // Clicking the path itself asks the file manager, without hunting for a
+  // button: typing a long Windows path by hand is what this field avoids.
+  assert.equal(typeof pathField.props.onClick, 'function', 'the path field opens the file manager when clicked')
+  pathField.props.onClick()
+  const clickedOpen = await settle(() => mainComponent({}))
+  assert.match(textOf(clickedOpen), /Pick a project folder/, 'a click on the path opens the folder browser')
   // The path can also be found in the file manager: a browser cannot read a
   // local folder, so the Host walks one level at a time over /browse.
   const browse = elementsOf(opened).find(
