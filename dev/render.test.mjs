@@ -389,8 +389,60 @@ const SCAN = {
     },
   ],
 }
+/* The two catalogs the settings sheet shows: what dsh-db-mcp can open, and what
+   the IDE calls its run configurations. They are separate answers from separate
+   places, and the sheet's whole point is putting them side by side. */
+const SETTINGS = {
+  ok: true,
+  file: 'C:\\cases\\e2e.registry.yml',
+  registryError: null,
+  targets: [
+    {
+      name: 'record-local',
+      baseUrl: 'https://127.0.0.1:8443',
+      projectPath: 'E:/project/backend/Record',
+      configurationName: '',
+      caseDir: 'C:\\cases',
+    },
+  ],
+  databases: [
+    {
+      name: 'iam',
+      from: '',
+      id: '',
+      kind: 'postgresql',
+      host: '127.0.0.1',
+      port: 5432,
+      database: 'iam_db',
+      user: 'postgres',
+      schema: 'public',
+      hasPassword: true,
+    },
+  ],
+  dbSources: {
+    ok: true,
+    file: 'C:\\Users\\administor-\\.dsh\\db-mcp\\datasources.json',
+    dir: 'C:\\Users\\administor-\\.dsh\\db-mcp',
+    sources: [
+      { id: 'iam-src', name: 'IAM', kind: 'postgresql', group: '', host: '127.0.0.1', port: 5432, database: 'iam_db', user: 'postgres', schema: 'public', usable: true },
+      { id: 'legacy', name: 'Legacy', kind: 'mysql', group: '', host: '127.0.0.1', port: 3306, database: 'legacy', user: '', schema: '', usable: false },
+    ],
+    error: null,
+  },
+  ide: {
+    host: '127.0.0.1',
+    port: 64342,
+    reachable: true,
+    restricted: false,
+    configurations: [{ name: 'RecordApplication', description: 'Spring Boot', supportsDynamicLaunchOverrides: false }],
+    error: null,
+  },
+  projectPath: 'E:/project/backend/Record',
+}
+
 globalThis.fetch = async (url, options) => {
   const path = String(url).split('/api')[1] || ''
+  const method = (options && options.method) || 'GET'
   requested.push(path)
   if (options && typeof options.body === 'string') {
     try {
@@ -409,7 +461,11 @@ globalThis.fetch = async (url, options) => {
           ? SCAN
           : path.startsWith('/import-endpoints')
             ? { ok: true, written: [{ endpoint: 'POST /auth/register', caseId: 'REG-009' }], skipped: [] }
-            : BOOTSTRAP
+            : path.startsWith('/settings')
+              ? method === 'POST'
+                ? { ok: true, changes: [], settings: SETTINGS }
+                : SETTINGS
+              : BOOTSTRAP
   return { ok: true, status: 200, json: async () => body }
 }
 
@@ -1132,6 +1188,62 @@ await test('the scan asks the Host about the open project', async () => {
     scans.pop().body.projectPath,
     'E:/project/backend/Record',
     'the scan reads the checkout the reader opened',
+  )
+})
+
+/* ---- the settings sheet ---- */
+
+// The two catalogs a reader needs are answers to the same question — "what does
+// this machine have?" — so there is one place to read both. The database entry
+// and its source are two halves of one decision, and the sheet has to show that
+// the source list is not empty, because an empty list looks like "nothing here"
+// rather than "nothing there yet".
+await test('the settings sheet puts the database source and the IDE configuration in one place', async () => {
+  let tree = await settle(() => mainComponent({}))
+  const settingsButton = elementsOf(tree).find(
+    (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /^Settings$/.test(textOf(node)),
+  )
+  assert.ok(settingsButton, 'the top bar carries the settings entry point')
+  settingsButton.props.onClick()
+  const opened = await settle(() => mainComponent({}))
+  const text = textOf(opened)
+  assert.match(text, /dsh-db-mcp source/, 'the sheet says where the databases come from')
+  assert.match(text, /iam/, 'the registry entry is listed')
+  assert.match(text, /iam-src — postgresql/, 'a usable source is offered with what it points at')
+  assert.match(text, /legacy — mysql \(not PostgreSQL-wire, cannot be used\)/, 'an unusable one is shown, and says why')
+  assert.match(text, /IDE run configuration/, 'the IDE half has its own heading')
+  assert.match(text, /RecordApplication/, 'the IDE listed a run configuration')
+  assert.match(text, /Allow setup\/teardown SQL to write/, 'the write switch is on the same sheet')
+})
+
+await test('picking a source and saving writes the registry, not the page', async () => {
+  let tree = await settle(() => mainComponent({}))
+  const selects = elementsOf(tree).filter((node) => node.type === 'select')
+  assert.ok(selects.length >= 3, 'entry, source and configuration are separate pickers')
+  // The source picker is the one whose options name dsh-db-mcp sources.
+  const sourcePicker = selects.find((node) =>
+    elementsOf(node).some((option) => String((option.props && option.props.value) || '') === 'iam-src'),
+  )
+  assert.ok(sourcePicker, 'a source picker exists')
+  sourcePicker.props.onChange({ target: { value: 'iam-src' } })
+  await settle(() => mainComponent({}))
+
+  const save = elementsOf(await settle(() => mainComponent({}))).find(
+    (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /^Save$/.test(textOf(node)),
+  )
+  assert.ok(save, 'the sheet has a save button')
+  save.props.onClick()
+  await settle(() => mainComponent({}))
+
+  const sent = posted.filter((entry) => entry.path.startsWith('/settings')).pop()
+  assert.ok(sent, 'saving reached the Host')
+  assert.equal(sent.body.database.name, 'iam')
+  assert.equal(sent.body.database.from, 'db-mcp', 'the pick is what makes the entry import its connection')
+  assert.equal(sent.body.database.id, 'iam-src')
+  assert.equal(
+    sent.body.projectPath,
+    'E:/project/backend/Record',
+    'the IDE list belongs to the open checkout, so the save says which one',
   )
 })
 

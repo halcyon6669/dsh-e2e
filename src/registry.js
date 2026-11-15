@@ -373,6 +373,43 @@ async function readDbMcpPassword(dir, id) {
   }
 }
 
+/**
+ * What dsh-db-mcp has registered, for the settings picker.
+ *
+ * This is the same catalog `importFromSource` reads, but read as a *list*: no
+ * secrets are touched, and a source this build cannot open is still listed with
+ * `usable: false` — hiding it would make the picker look empty next to a
+ * dsh-db-mcp panel that plainly shows it.
+ */
+export async function listDbMcpSources(options = {}) {
+  const env = options.env || process.env
+  const dir = env && env.DSH_DB_MCP_DIR ? String(env.DSH_DB_MCP_DIR) : join(homedir(), '.dsh', 'db-mcp')
+  const file = join(dir, 'datasources.json')
+  let catalog
+  try {
+    catalog = JSON.parse(await readFile(file, 'utf8'))
+  } catch (error) {
+    return { ok: false, file, dir, sources: [], error: `${file} could not be read: ${error.message}` }
+  }
+  const sources = (catalog.datasources || []).map((item) => {
+    const config = item.config || {}
+    const kind = String(item.kind || '').toLowerCase()
+    return {
+      id: String(item.id || ''),
+      name: item.name ? String(item.name) : '',
+      kind,
+      group: item.group ? String(item.group) : '',
+      host: config.host ? String(config.host) : '127.0.0.1',
+      port: Number(config.port || 5432),
+      database: config.database ? String(config.database) : '',
+      user: config.user ? String(config.user) : '',
+      schema: config.schema ? String(config.schema) : '',
+      usable: ['postgresql', 'postgres', 'opengauss', 'gaussdb', 'gauss'].includes(kind),
+    }
+  })
+  return { ok: true, file, dir, sources, error: null }
+}
+
 /** What the listing tool shows: enough to identify the database, never a password. */
 export async function describeDatabase(registry, name) {
   const entry = registry.databases[name]
@@ -577,4 +614,167 @@ export async function removeTarget(input = {}) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// ---------------------------------------------------------------- entry edits
+
+const SECTION_INDENT = '  '
+const FIELD_INDENT = '    '
+
+/**
+ * The line range of one top-level `section:` block. A block ends at the first
+ * line that is neither blank, nor a comment, nor indented — the same rule
+ * addTarget uses to find where its new mapping goes.
+ */
+function sectionBounds(lines, section) {
+  const start = lines.findIndex((line) => new RegExp(`^${section}[ \\t]*:[ \\t]*(#.*)?$`).test(line))
+  if (start < 0) return null
+  let end = lines.length
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (line.trim() === '' || /^\s*#/.test(line)) continue
+    if (/^[ \t]/.test(line)) continue
+    end = index
+    break
+  }
+  return { start, end }
+}
+
+/** The `  name:` mapping inside a section, with the indentation it actually uses. */
+function findMapping(lines, bounds, name) {
+  for (let index = bounds.start + 1; index < bounds.end; index += 1) {
+    const match = lines[index].match(/^([ \t]+)([A-Za-z0-9_.-]+)[ \t]*:[ \t]*(.*)$/)
+    if (match && match[2] === name) return { index, indent: match[1] }
+  }
+  return null
+}
+
+/** One scalar as YAML a reader would have written by hand. */
+function yamlScalar(value) {
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'number') return String(value)
+  const text = String(value).replace(/\\/g, '/')
+  if (text === '' || /^[\s#&*!|>%@`{}[\],]|: |\s$/.test(text)) {
+    return `"${text.replace(/"/g, '\\"')}"`
+  }
+  return text
+}
+
+/**
+ * Sets (or removes) fields of one target or database entry, as a text edit.
+ *
+ * The registry is a hand-written file with comments and `${env:…}` fallbacks, so
+ * a parse-and-redump would throw its explanations away. This finds the entry's
+ * mapping and rewrites only the lines it was asked about; a field whose value is
+ * null or undefined is deleted, which is how a database entry stops carrying the
+ * inline host/port it no longer needs once it points at dsh-db-mcp.
+ */
+export async function writeEntry(input = {}) {
+  const { config = {}, caseDir } = input
+  const section = String(input.section || '').trim()
+  const name = String(input.name || '').trim()
+  if (section !== 'targets' && section !== 'databases') {
+    throw new RegistryError(`cannot write section "${section}"; this writes targets and databases only`)
+  }
+  if (!name) throw new RegistryError(`a ${section} entry needs a name to be written`)
+  if (!/^[a-z][a-z0-9_-]*$/i.test(name)) {
+    throw new RegistryError(`"${name}" is not a usable entry name: letters, digits, dashes and underscores, starting with a letter`)
+  }
+  const allowed = section === 'targets' ? TARGET_KEYS : DATABASE_KEYS
+  const fields = input.fields && typeof input.fields === 'object' ? input.fields : {}
+  const unknown = Object.keys(fields).filter((key) => !allowed.has(key))
+  if (unknown.length > 0) {
+    throw new RegistryError(`${section}.${name} has unknown field(s) ${unknown.join(', ')}; allowed: ${[...allowed].join(', ')}`)
+  }
+  if (Object.keys(fields).length === 0) return { section, name, file: null, changed: false }
+
+  let file = null
+  let text = ''
+  for (const candidate of registryCandidates({ config, caseDir })) {
+    try {
+      text = await readFile(candidate, 'utf8')
+      file = candidate
+      break
+    } catch (error) {
+      if (error && error.code === 'ENOENT') continue
+      throw new RegistryError(`cannot read registry file ${candidate}: ${error.message}`)
+    }
+  }
+  if (!file) {
+    throw new RegistryError(`no registry file was found to write ${section}.${name} to`, { name, section })
+  }
+
+  const lines = text.split('\n')
+  let bounds = sectionBounds(lines, section)
+  const entries = Object.entries(fields).filter(([, value]) => value !== null && value !== undefined)
+  const removals = Object.entries(fields).filter(([, value]) => value === null || value === undefined)
+
+  if (!bounds) {
+    // The section is not there yet. Adding it at the end keeps every existing
+    // comment in the file exactly where its author left it.
+    if (entries.length === 0) return { section, name, file, changed: false }
+    while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
+    lines.push(`${section}:`)
+    bounds = { start: lines.length - 1, end: lines.length }
+  }
+
+  let mapping = findMapping(lines, bounds, name)
+  if (!mapping) {
+    // A new mapping goes after the last entry of the section, before the blank
+    // lines and comments that usually announce the next top-level block.
+    let insertAt = bounds.start + 1
+    for (let index = bounds.start + 1; index < bounds.end; index += 1) {
+      if (lines[index].trim() !== '') insertAt = index + 1
+    }
+    const block = [`${SECTION_INDENT}${name}:`, ...entries.map(([key, value]) => `${FIELD_INDENT}${key}: ${yamlScalar(value)}`)]
+    lines.splice(insertAt, 0, ...block)
+    mapping = { index: insertAt, indent: SECTION_INDENT }
+    bounds = { start: bounds.start, end: bounds.end + block.length }
+  }
+
+  // Recompute the mapping's extent from its own indentation, so a field added
+  // last time is found again and a nested line is never mistaken for a sibling.
+  const fieldIndent = `${mapping.indent}  `
+  let fieldEnd = mapping.index + 1
+  while (fieldEnd < lines.length) {
+    const line = lines[fieldEnd]
+    if (line.trim() === '') break
+    if (line.startsWith(fieldIndent) || new RegExp(`^[ \\t]{${mapping.indent.length + 1},}`).test(line)) { fieldEnd += 1; continue }
+    break
+  }
+
+  for (const [key, value] of removals) {
+    for (let index = fieldEnd - 1; index > mapping.index; index -= 1) {
+      if (new RegExp(`^${fieldIndent}${escapeRegExp(key)}[ \\t]*:`).test(lines[index])) {
+        lines.splice(index, 1)
+        fieldEnd -= 1
+      }
+    }
+  }
+  for (const [key, value] of entries) {
+    const rendered = `${fieldIndent}${key}: ${yamlScalar(value)}`
+    let replaced = false
+    for (let index = mapping.index + 1; index < fieldEnd; index += 1) {
+      if (new RegExp(`^${fieldIndent}${escapeRegExp(key)}[ \\t]*:`).test(lines[index])) {
+        lines[index] = rendered
+        replaced = true
+        break
+      }
+    }
+    if (!replaced) {
+      lines.splice(fieldEnd, 0, rendered)
+      fieldEnd += 1
+    }
+  }
+
+  const updated = lines.join('\n')
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
+  try {
+    await writeFile(tmp, updated, 'utf8')
+    await rename(tmp, file)
+  } catch (error) {
+    try { await unlink(tmp) } catch { /* nothing to clean */ }
+    throw new RegistryError(`cannot write ${file}: ${error.message}`)
+  }
+  return { section, name, file, changed: updated !== text }
 }

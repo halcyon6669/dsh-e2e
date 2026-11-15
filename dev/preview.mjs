@@ -266,6 +266,54 @@ const BOOTSTRAP = {
   runtimes: [],
 }
 
+const SETTINGS = {
+  ok: true,
+  file: 'C:\\cases\\e2e.registry.yml',
+  registryError: null,
+  targets: [
+    {
+      name: 'record-local',
+      baseUrl: 'https://127.0.0.1:8443',
+      projectPath: 'E:/project/backend/Record',
+      configurationName: 'RecordApplication',
+      caseDir: 'C:\\cases',
+    },
+  ],
+  databases: [
+    {
+      name: 'iam',
+      from: '',
+      id: '',
+      kind: 'postgresql',
+      host: '127.0.0.1',
+      port: 5432,
+      database: 'iam_db',
+      user: 'postgres',
+      schema: 'public',
+      hasPassword: true,
+    },
+  ],
+  dbSources: {
+    ok: true,
+    file: 'C:\\Users\\administor-\\.dsh\\db-mcp\\datasources.json',
+    dir: 'C:\\Users\\administor-\\.dsh\\db-mcp',
+    sources: [
+      { id: 'iam-src', name: 'IAM', kind: 'postgresql', group: '', host: '127.0.0.1', port: 5432, database: 'iam_db', user: 'postgres', schema: 'public', usable: true },
+      { id: 'legacy', name: 'Legacy', kind: 'mysql', group: '', host: '127.0.0.1', port: 3306, database: 'legacy', user: '', schema: '', usable: false },
+    ],
+    error: null,
+  },
+  ide: {
+    host: '127.0.0.1',
+    port: 64342,
+    reachable: true,
+    restricted: false,
+    configurations: [{ name: 'RecordApplication', description: 'Spring Boot', supportsDynamicLaunchOverrides: false }],
+    error: null,
+  },
+  projectPath: 'E:/project/backend/Record',
+}
+
 const CASE_FILE = {
   ok: true,
   path: 'C:\\cases\\auth-register.yaml',
@@ -477,7 +525,9 @@ globalThis.fetch = async (url) => {
       ? CASE_FILE
       : path.startsWith('/report?')
         ? PAST_REPORT
-        : BOOTSTRAP
+        : path.startsWith('/settings')
+          ? SETTINGS
+          : BOOTSTRAP
   return { ok: true, status: 200, json: async () => body }
 }
 
@@ -691,8 +741,24 @@ if (projectRow && typeof projectRow.props.onClick === 'function') {
   projectRow.props.onClick()
   const inside = await settle(mainComponent)
   pages.push({ name: 'cases', file: write('cases', inside, { dark: true, width: 1440 }) })
+
+  // The settings sheet, because it is the one surface that shows two catalogs
+  // side by side and a wrapping label there is invisible in a render test.
+  const settingsButton = findNode(inside, 'e2e-btn', /^Settings$/)
+  if (settingsButton && typeof settingsButton.props.onClick === 'function') {
+    settingsButton.props.onClick()
+    const sheet = await settle(mainComponent)
+    pages.push({ name: 'settings', file: write('settings', sheet, { dark: true, width: 1440 }) })
+    const closeButton = findNode(sheet, 'e2e-btn', /^(Close|Cancel)$/)
+    if (closeButton && typeof closeButton.props.onClick === 'function') closeButton.props.onClick()
+    await settle(mainComponent)
+  } else {
+    console.log('warn: no Settings button in the case list')
+  }
+
+  const backToList = await settle(mainComponent)
   // The row is a container; the click lives on the open button inside it.
-  caseRow = findNode(inside, 'e2e-case-open', /REG-001/)
+  caseRow = findNode(backToList, 'e2e-case-open', /REG-001/)
 }
 
 if (caseRow && typeof caseRow.props.onClick === 'function') {

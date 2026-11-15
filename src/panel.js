@@ -22,7 +22,18 @@ import { runCase, redactReport } from './runner.js'
 import { renderSummary } from './report.js'
 import { auditBaseUrl, checkTargets } from './guard.js'
 import { resolveEnvironment, describeEnvironment } from './resolve.js'
-import { loadRegistry, describeDatabase, isRegistryFileName, knownNames, resolveTarget, addTarget, removeTarget, RegistryError } from './registry.js'
+import {
+  loadRegistry,
+  describeDatabase,
+  isRegistryFileName,
+  knownNames,
+  listDbMcpSources,
+  resolveTarget,
+  addTarget,
+  removeTarget,
+  writeEntry,
+  RegistryError,
+} from './registry.js'
 import { generateCase, explainFailure, GenerateError } from './ai.js'
 import { listProjects } from './projects.js'
 import { describeSteps, hasAssertions } from './plan.js'
@@ -1102,6 +1113,13 @@ export function createPanel({ ctx, config = {}, state }) {
     { method: 'POST', path: '/scan', mutate: true, handler: async (body) => scan(body) },
     { method: 'POST', path: '/scaffold', mutate: true, handler: async (body) => scaffold(body) },
     { method: 'POST', path: '/import-endpoints', mutate: true, handler: async (body) => importEndpoints(body) },
+    { method: 'GET', path: '/settings', handler: async (_body, url) =>
+      readSettings({
+        projectPath: url.searchParams.get('projectPath') || '',
+        ideHost: url.searchParams.get('ideHost') || undefined,
+        idePort: url.searchParams.get('idePort') || undefined,
+      }) },
+    { method: 'POST', path: '/settings', mutate: true, handler: async (body) => saveSettings(body) },
   ]
 
   /**
@@ -1304,6 +1322,186 @@ export function createPanel({ ctx, config = {}, state }) {
     }
   }
 
+  /**
+   * The IDE's run configurations, for the picker.
+   *
+   * A picker that cannot answer has to say why instead of looking empty: an IDE
+   * that is not running is the normal reason, and none of this is an error in
+   * the registry — the reader is holding the settings sheet open, not a run.
+   */
+  async function listIdeConfigurations(projectPath, input = {}) {
+    const { IdeaClient, probeIdea } = await import('./idea.js')
+    const host = String(input.ideHost || config.ideHost || '127.0.0.1')
+    const port = Number(input.idePort || config.idePort || 64342)
+    const probe = await probeIdea(host, port, 2500)
+    const where = `${host}:${port}`
+    if (!probe.reachable) {
+      return {
+        host,
+        port,
+        reachable: false,
+        restricted: false,
+        configurations: [],
+        error: `the IDE MCP at ${where} is not reachable: ${probe.error || 'no answer'}`,
+      }
+    }
+    if (probe.restricted) {
+      return {
+        host,
+        port,
+        reachable: true,
+        restricted: true,
+        configurations: [],
+        error: `the IDE MCP at ${where} answered ${probe.statusCode}; this request was not authorised`,
+      }
+    }
+    let client = null
+    try {
+      client = new IdeaClient({ host, port, timeoutMs: 20000 })
+      await client.connect()
+      const listed = await client.callTool('get_run_configurations', projectPath ? { projectPath } : {})
+      const configurations = listed.structured && Array.isArray(listed.structured.configurations) ? listed.structured.configurations : []
+      return {
+        host,
+        port,
+        reachable: true,
+        restricted: false,
+        configurations: configurations.map((entry) => ({
+          name: String(entry.name || ''),
+          description: entry.description ? String(entry.description) : '',
+          supportsDynamicLaunchOverrides: entry.supportsDynamicLaunchOverrides === true,
+        })),
+        error: null,
+      }
+    } catch (error) {
+      return { host, port, reachable: true, restricted: false, configurations: [], error: error.message }
+    } finally {
+      if (client) client.close()
+    }
+  }
+
+  /**
+   * Everything the settings sheet needs, in one answer: what the registry holds
+   * today, and the two catalogs a reader can point it at.
+   */
+  async function readSettings(input = {}) {
+    const dirs = roots()
+    let registry = null
+    let registryError = null
+    try {
+      registry = await loadRegistry({ config, caseDir: dirs[0] || null, env: process.env })
+    } catch (error) {
+      registryError = error.message
+    }
+    const targets = []
+    const databases = []
+    if (registry) {
+      for (const name of knownNames(registry, 'targets')) {
+        const entry = registry.targets[name] || {}
+        targets.push({
+          name,
+          baseUrl: entry.baseUrl ? String(entry.baseUrl) : '',
+          projectPath: entry.projectPath ? String(entry.projectPath) : '',
+          configurationName: entry.configurationName ? String(entry.configurationName) : '',
+          caseDir: entry.caseDir ? String(entry.caseDir) : '',
+        })
+      }
+      for (const name of knownNames(registry, 'databases')) {
+        const entry = registry.databases[name] || {}
+        databases.push({
+          name,
+          from: entry.from ? String(entry.from) : '',
+          id: entry.id ? String(entry.id) : '',
+          kind: entry.kind ? String(entry.kind) : '',
+          host: entry.host ? String(entry.host) : '',
+          port: entry.port === undefined || entry.port === null ? null : Number(entry.port),
+          database: entry.database ? String(entry.database) : '',
+          user: entry.user ? String(entry.user) : '',
+          schema: entry.schema ? String(entry.schema) : '',
+          // Never the password itself: the sheet says whether one is set, which
+          // is the only question a picker can answer without leaking it.
+          hasPassword: entry.password !== undefined && entry.password !== null && String(entry.password) !== '',
+        })
+      }
+    }
+    // The IDE is asked about the project the reader is looking at, so the list is
+    // that project's configurations rather than whatever the IDE ran last.
+    const projectPath = String(input.projectPath || '').trim() || (await defaultProjectPath())
+    const dbSources = await listDbMcpSources({ env: process.env })
+    const ide = await listIdeConfigurations(projectPath, input)
+    return {
+      ok: true,
+      file: registry && registry.file ? registry.file : null,
+      registryError,
+      targets,
+      databases,
+      dbSources,
+      ide,
+      projectPath: projectPath || null,
+    }
+  }
+
+  /**
+   * Writes the settings that live in the registry.
+   *
+   * Two edits exist today: a target's IDE run configuration, and a database
+   * pointing at a dsh-db-mcp source instead of carrying its own host and
+   * password. Both go through `writeEntry`, which edits the file's text — the
+   * registry is hand-written and its comments have to survive.
+   */
+  async function saveSettings(input = {}) {
+    const dir = roots()[0] || defaultCaseDir({ state })
+    const changes = []
+    const target = input.target && typeof input.target === 'object' ? input.target : null
+    if (target && String(target.name || '').trim()) {
+      const name = String(target.name).trim()
+      const fields = {}
+      if (target.configurationName !== undefined) {
+        const value = String(target.configurationName || '').trim()
+        fields.configurationName = value === '' ? null : value
+      }
+      const written = await writeEntry({ config, caseDir: dir, section: 'targets', name, fields })
+      changes.push({ section: 'targets', name, file: written.file, changed: written.changed })
+    }
+    const database = input.database && typeof input.database === 'object' ? input.database : null
+    if (database && String(database.name || '').trim()) {
+      const name = String(database.name).trim()
+      const from = String(database.from || '').trim()
+      const fields = {}
+      if (from === 'db-mcp') {
+        const id = String(database.id || name).trim()
+        const sources = await listDbMcpSources({ env: process.env })
+        if (!sources.ok) throw new PanelError(`cannot read the dsh-db-mcp catalog: ${sources.error}`, 422)
+        const source = sources.sources.find((item) => item.id === id)
+        if (!source) {
+          const available = sources.sources.map((item) => item.id).join(', ') || 'none'
+          throw new PanelError(`dsh-db-mcp has no source "${id}"; it has: ${available}`, 422)
+        }
+        if (!source.usable) {
+          throw new PanelError(
+            `"${id}" is a ${source.kind} source in dsh-db-mcp; this build opens PostgreSQL-wire databases only`,
+            422,
+          )
+        }
+        // An entry importing a source must stop carrying its own connection: two
+        // copies of the same address is how a password ends up in a YAML file.
+        fields.from = 'db-mcp'
+        fields.id = id
+        for (const key of ['kind', 'host', 'port', 'database', 'user', 'password']) fields[key] = null
+        if (database.schema !== undefined) {
+          const schema = String(database.schema || '').trim()
+          fields.schema = schema === '' ? null : schema
+        }
+      } else {
+        fields.from = null
+        fields.id = null
+      }
+      const written = await writeEntry({ config, caseDir: dir, section: 'databases', name, fields })
+      changes.push({ section: 'databases', name, file: written.file, changed: written.changed })
+    }
+    return { ok: true, changes, settings: await readSettings(input) }
+  }
+
   async function handle(request, response) {
     const url = new URL(request.url || '/', 'http://localhost')
     const path = url.pathname.replace(/^\/plugins\/e2e\/api/, '') || '/'
@@ -1361,6 +1559,8 @@ export function createPanel({ ctx, config = {}, state }) {
     createProject,
     deleteProject,
     importEndpoints,
+    readSettings,
+    saveSettings,
     dispose() {
       runs.clear()
       batches.clear()

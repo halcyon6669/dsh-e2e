@@ -22,7 +22,7 @@ import { renderMarkdown, renderSummary } from '../src/report.js'
 import { isReadOnly } from '../src/db.js'
 import { listCasesIn, nextCaseId, resolveCasePath, StoreError } from '../src/store.js'
 import { caseStatus, describeSteps, hasAssertions, summariseStatuses } from '../src/plan.js'
-import { loadRegistry, resolveDatabase, describeDatabase, RegistryError } from '../src/registry.js'
+import { loadRegistry, resolveDatabase, describeDatabase, RegistryError, listDbMcpSources, writeEntry } from '../src/registry.js'
 import { parseYaml, parserCandidates } from '../src/yaml.js'
 import { createPanel, PanelError } from '../src/panel.js'
 
@@ -1529,6 +1529,138 @@ await testAsync('a directory outside every case root is refused', async () => {
       return true
     },
   )
+})
+
+section('settings')
+
+// The registry is a hand-written file. Editing it has to leave its comments —
+// the only documentation the reader has for why a target exists — exactly where
+// they are, and it has to be able to say "this field is gone now", which is what
+// happens when a database starts importing its connection from dsh-db-mcp.
+const SETTINGS_CASES = join(tmpDir, 'settings-cases')
+await mkdir(SETTINGS_CASES, { recursive: true })
+const SETTINGS_REGISTRY = join(SETTINGS_CASES, 'e2e.registry.yml')
+const SETTINGS_TEXT = [
+  '# The local fleet. Comments here are the only notes on why each one exists.',
+  'targets:',
+  '  # the checkout the backend team runs',
+  '  record:',
+  '    baseUrl: http://127.0.0.1:8080',
+  '    projectPath: E:/project/backend/Record',
+  '',
+  'databases:',
+  '  iam:',
+  '    kind: postgresql',
+  '    host: 127.0.0.1',
+  '    port: 5432',
+  '    database: iam_db',
+  '    user: postgres',
+  '    password: ${env:IAM_PASSWORD:-iam_postgres_password}',
+  '',
+].join('\n')
+await writeFile(SETTINGS_REGISTRY, SETTINGS_TEXT, 'utf8')
+
+const DB_MCP_DIR = join(tmpDir, 'db-mcp')
+await mkdir(DB_MCP_DIR, { recursive: true })
+await writeFile(
+  join(DB_MCP_DIR, 'datasources.json'),
+  JSON.stringify({
+    datasources: [
+      { id: 'iam-src', name: 'IAM', kind: 'postgresql', config: { host: '127.0.0.1', port: 5432, database: 'iam_db', user: 'postgres' } },
+      { id: 'legacy', name: 'Legacy', kind: 'mysql', config: { host: '127.0.0.1', port: 3306, database: 'legacy' } },
+    ],
+  }),
+  'utf8',
+)
+
+const settingsPanel = createPanel({
+  ctx: { get: () => undefined },
+  config: { caseDir: SETTINGS_CASES },
+  state: { dataDir: join(tmpDir, 'settings-data') },
+})
+
+await testAsync('the db-mcp catalog lists what it has, and says which are usable', async () => {
+  const listed = await listDbMcpSources({ env: { DSH_DB_MCP_DIR: DB_MCP_DIR } })
+  assert.equal(listed.ok, true)
+  assert.deepEqual(listed.sources.map((item) => item.id), ['iam-src', 'legacy'])
+  assert.equal(listed.sources[0].usable, true, 'postgresql can be opened')
+  assert.equal(listed.sources[1].usable, false, 'mysql cannot be opened by this build')
+})
+
+await testAsync('a catalog that is not there says so instead of throwing at the picker', async () => {
+  const listed = await listDbMcpSources({ env: { DSH_DB_MCP_DIR: join(tmpDir, 'no-such-dir') } })
+  assert.equal(listed.ok, false)
+  assert.deepEqual(listed.sources, [])
+  assert.match(String(listed.error), /could not be read/)
+})
+
+await testAsync('writing a field keeps the file comments where they were', async () => {
+  const result = await writeEntry({
+    config: { caseDir: SETTINGS_CASES },
+    caseDir: SETTINGS_CASES,
+    section: 'targets',
+    name: 'record',
+    fields: { configurationName: 'RecordApplication' },
+  })
+  assert.equal(result.changed, true)
+  const text = await readFile(SETTINGS_REGISTRY, 'utf8')
+  assert.match(text, /# the checkout the backend team runs/)
+  assert.match(text, /^ {4}baseUrl: http:\/\/127\.0\.0\.1:8080$/m)
+  assert.match(text, /^ {4}configurationName: RecordApplication$/m)
+})
+
+await testAsync('a null field removes the line, which is how an import takes over', async () => {
+  process.env.DSH_DB_MCP_DIR = DB_MCP_DIR
+  try {
+    const saved = await settingsPanel.saveSettings({ database: { name: 'iam', from: 'db-mcp', id: 'iam-src' } })
+    assert.equal(saved.ok, true)
+    const text = await readFile(SETTINGS_REGISTRY, 'utf8')
+    assert.match(text, /^ {4}from: db-mcp$/m)
+    assert.match(text, /^ {4}id: iam-src$/m)
+    assert.doesNotMatch(text, /^ {4}host:/m, 'the address now lives in dsh-db-mcp, not here')
+    assert.doesNotMatch(text, /^ {4}password:/m, 'and so does the password')
+  } finally {
+    delete process.env.DSH_DB_MCP_DIR
+  }
+})
+
+await testAsync('a source that cannot be opened is refused, in words that name it', async () => {
+  process.env.DSH_DB_MCP_DIR = DB_MCP_DIR
+  try {
+    await assert.rejects(
+      () => settingsPanel.saveSettings({ database: { name: 'iam', from: 'db-mcp', id: 'legacy' } }),
+      (error) => {
+        assert.ok(error instanceof PanelError)
+        assert.match(error.message, /legacy"? is a mysql source/)
+        return true
+      },
+    )
+    await assert.rejects(
+      () => settingsPanel.saveSettings({ database: { name: 'iam', from: 'db-mcp', id: 'nope' } }),
+      (error) => {
+        assert.ok(error instanceof PanelError)
+        assert.match(error.message, /has no source "nope"/)
+        return true
+      },
+    )
+  } finally {
+    delete process.env.DSH_DB_MCP_DIR
+  }
+})
+
+await testAsync('the settings read back what was written, and never a password', async () => {
+  const settings = await settingsPanel.readSettings({ projectPath: 'E:/project/backend/Record' })
+  assert.equal(settings.ok, true)
+  assert.equal(settings.registryError, null)
+  const iam = settings.databases.find((entry) => entry.name === 'iam')
+  assert.equal(iam.from, 'db-mcp')
+  assert.equal(iam.id, 'iam-src')
+  assert.equal(iam.hasPassword, false, 'an imported entry holds no password of its own')
+  const record = settings.targets.find((entry) => entry.name === 'record')
+  assert.equal(record.configurationName, 'RecordApplication')
+  assert.ok(settings.ide, 'the IDE half is always present, even when it is unreachable')
+  assert.equal(typeof settings.ide.reachable, 'boolean')
+  assert.equal(JSON.stringify(settings).includes('iam_postgres_password'), false, 'the secret never leaves the Host')
 })
 
 section('yaml')

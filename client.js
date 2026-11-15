@@ -71,6 +71,24 @@ window.__ModuleLoader__.load({
         'label.source': 'Source',
         'label.allowWrites': 'Allow setup/teardown SQL to write',
         'label.allowWritesHint': 'Off by default. A case whose setup INSERTs or DELETEs needs this, and a refused run tells you so.',
+        'label.allowWritesOn': 'Writes allowed: setup/teardown SQL may change rows this run.',
+        'action.settings': 'Settings',
+        'label.settings': 'Settings',
+        'label.settingsHint':
+          'What this machine has, pointed at by the registry. The databases come from dsh-db-mcp; the run configurations come from the IDE MCP.',
+        'label.settingsDatabase': 'Database',
+        'label.settingsDatabaseEntry': 'Registry entry',
+        'label.settingsSource': 'dsh-db-mcp source',
+        'label.settingsSourceNone': 'keep its own connection',
+        'label.settingsNotPostgres': 'not PostgreSQL-wire, cannot be used',
+        'label.settingsIde': 'IDE run configuration',
+        'label.settingsTarget': 'Target',
+        'label.settingsConfiguration': 'Configuration',
+        'label.settingsConfigurationNone': 'not set',
+        'empty.noDatabases': 'The registry defines no database. Add one to the registry file, then pick it here.',
+        'empty.noTargets': 'The registry defines no target, so there is nothing to point at an IDE configuration.',
+        'empty.noConfigurations': 'The IDE reported no run configuration for this project.',
+        'notice.settingsSaved': 'Settings saved.',
         'label.keepRunning': 'Leave the service running after the run',
         'label.generateFor': 'Describe the behaviour this case should prove',
         'label.generatePlaceholder': 'e.g. registering with a taken username returns 409 and writes no second row',
@@ -330,6 +348,23 @@ window.__ModuleLoader__.load({
         'label.source': '来源',
         'label.allowWrites': '允许 setup/teardown 的 SQL 写入',
         'label.allowWritesHint': '默认关闭。setup 里有 INSERT/DELETE 的用例需要它，被拒绝时也会提示你。',
+        'label.allowWritesOn': '已允许写入：这次运行的 setup/teardown SQL 可以改数据。',
+        'action.settings': '设置',
+        'label.settings': '设置',
+        'label.settingsHint': '这台机器上有什么，由注册表指向它们。数据库来自 dsh-db-mcp，运行配置来自 IDE MCP。',
+        'label.settingsDatabase': '数据库',
+        'label.settingsDatabaseEntry': '注册表条目',
+        'label.settingsSource': 'dsh-db-mcp 数据源',
+        'label.settingsSourceNone': '保留它自己的连接',
+        'label.settingsNotPostgres': '不是 PostgreSQL 协议，用不了',
+        'label.settingsIde': 'IDE 运行配置',
+        'label.settingsTarget': '目标',
+        'label.settingsConfiguration': '配置',
+        'label.settingsConfigurationNone': '未设置',
+        'empty.noDatabases': '注册表里没有数据库。先在注册表文件里加一个，再回来选。',
+        'empty.noTargets': '注册表里没有目标，没有东西可以指向 IDE 运行配置。',
+        'empty.noConfigurations': 'IDE 没有为这个项目列出任何运行配置。',
+        'notice.settingsSaved': '设置已保存。',
         'label.keepRunning': '运行结束后保留服务',
         'label.generateFor': '描述这个用例要证明的行为',
         'label.generatePlaceholder': '例如：用已存在的用户名注册返回 409，且不写入第二行',
@@ -863,7 +898,7 @@ window.__ModuleLoader__.load({
      * reader thinks in; the endpoint is still on the row, so the grouping never
      * hides the route.
      */
-    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onScan, onAddTests, onRunAll, running, checked, onToggleChecked, onRunSelected }) {
+    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onScan, onRunAll, running, checked, onToggleChecked, onRunSelected }) {
       const counts = project.statusCounts || { all: 0 }
       const tabs = ['all', 'planned', 'generated', 'running', 'passed', 'failed', 'blocked']
       const [folded, setFolded] = React.useState({})
@@ -924,9 +959,10 @@ window.__ModuleLoader__.load({
           // Reading the endpoints out of the source is the one action here that
           // is about the project rather than about the list, so it sits at the
           // head of the toolbar's actions — the place a reader looks for "do
-          // something with all of this".
+          // something with all of this". "New case" is not repeated here: the
+          // project line above already carries it, and two buttons that do the
+          // same thing 30px apart only make the reader choose.
           h(Btn, { small: true, onClick: onScan }, t('action.scan')),
-          h(Btn, { small: true, onClick: onAddTests }, t('action.new')),
         ),
         h(
           'div',
@@ -938,17 +974,24 @@ window.__ModuleLoader__.load({
             onChange: (event) => onQuery(event.target.value),
           }),
         ),
+        // The rows live in their own scroller. The page around this table is a
+        // column of panels, and a table that grows with its content pushes the
+        // run controls off the bottom of the window — so the list scrolls and
+        // the panels below stay where they are.
         h(
           'div',
-          { className: 'e2e-cases-head' },
-          h('span', { className: 'e2e-col-check' }),
-          h('span', { className: 'e2e-col-id' }, 'ID'),
-          h('span', { className: 'e2e-col-name' }, t('label.testName')),
-          h('span', { className: 'e2e-col-status' }, t('label.latestStatus')),
-          h('span', { className: 'e2e-col-diagnostic' }, t('label.diagnostic')),
-          h('span', { className: 'e2e-col-actions' }, t('label.actions')),
-        ),
-        total === 0
+          { className: 'e2e-cases-body' },
+          h(
+            'div',
+            { className: 'e2e-cases-head' },
+            h('span', { className: 'e2e-col-check' }),
+            h('span', { className: 'e2e-col-id' }, 'ID'),
+            h('span', { className: 'e2e-col-name' }, t('label.testName')),
+            h('span', { className: 'e2e-col-status' }, t('label.latestStatus')),
+            h('span', { className: 'e2e-col-diagnostic' }, t('label.diagnostic')),
+            h('span', { className: 'e2e-col-actions' }, t('label.actions')),
+          ),
+          total === 0
           ? h('div', { className: 'e2e-empty-box' }, needle ? t('empty.noSearchResults', { query }) : t('empty.noCases'))
           : groups.map((bucket) => {
               const isFolded = Boolean(folded[bucket.name])
@@ -1054,6 +1097,7 @@ window.__ModuleLoader__.load({
                     }),
               )
             }),
+        ),
         total > 0
           ? h(
               'div',
@@ -2511,6 +2555,182 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /* ---------- the settings sheet ---------- */
+
+    /**
+     * Where the registry is pointed at things, in one place.
+     *
+     * The two catalogs a reader needs — the databases dsh-db-mcp can open, and
+     * the run configurations the IDE knows — are answers to the same question
+     * ("what does this machine have?"), so they are asked on one sheet. Each
+     * picker says what it could not reach instead of going silently empty: an
+     * IDE that is not running is the usual reason a list has no rows, and that
+     * is information, not an empty state.
+     *
+     * Like the scan dialog, it owns nothing: what it shows and what to do with
+     * a pick both arrive from the panel.
+     */
+    function SettingsDialog(props) {
+      const {
+        t,
+        settings,
+        target,
+        database,
+        source,
+        config,
+        allowWrites,
+        busy,
+        error,
+        onClose,
+        onTarget,
+        onDatabase,
+        onSource,
+        onConfig,
+        onAllowWrites,
+        onSave,
+      } = props
+
+      const data = settings.data || {}
+      const sources = (data.dbSources && data.dbSources.sources) || []
+      const ide = data.ide || {}
+      const configurations = ide.configurations || []
+
+      const field = (label, control) =>
+        h('label', { className: 'e2e-settings-field' }, h('span', { className: 'e2e-settings-label' }, label), control)
+
+      return h(
+        'div',
+        {
+          className: 'e2e-scan-backdrop',
+          onClick: (event) => {
+            if (event.target === event.currentTarget) onClose()
+          },
+        },
+        h(
+          'div',
+          { className: 'e2e-scan e2e-settings' },
+          h(
+            'div',
+            { className: 'e2e-scan-head' },
+            h('strong', null, t('label.settings')),
+            h('div', { className: 'e2e-spacer' }),
+            h(Btn, { small: true, onClick: onClose }, t('action.close')),
+          ),
+          h('div', { className: 'e2e-hint' }, t('label.settingsHint')),
+          data.file ? h('code', { className: 'e2e-file' }, data.file) : null,
+          data.registryError ? h('div', { className: 'e2e-error' }, data.registryError) : null,
+          settings.error ? h('div', { className: 'e2e-error' }, settings.error) : null,
+          error ? h('div', { className: 'e2e-error' }, error) : null,
+          settings.status === 'loading'
+            ? h('div', { className: 'e2e-hint' }, t('state.loading'))
+            : null,
+          // The database: which entry, and which dsh-db-mcp source it should
+          // import. Picking a source is what makes the password live in one
+          // place instead of two.
+          h(
+            'div',
+            { className: 'e2e-settings-block' },
+            h('div', { className: 'e2e-settings-title' }, t('label.settingsDatabase')),
+            (data.databases || []).length === 0
+              ? h('div', { className: 'e2e-muted' }, t('empty.noDatabases'))
+              : field(
+                  t('label.settingsDatabaseEntry'),
+                  h(
+                    'select',
+                    { className: 'e2e-input', value: database, onChange: (event) => onDatabase(event.target.value) },
+                    (data.databases || []).map((entry) =>
+                      h('option', { key: entry.name, value: entry.name }, entry.name),
+                    ),
+                  ),
+                ),
+            field(
+              t('label.settingsSource'),
+              h(
+                'select',
+                { className: 'e2e-input', value: source, onChange: (event) => onSource(event.target.value) },
+                h('option', { value: '' }, t('label.settingsSourceNone')),
+                sources.map((entry) =>
+                  h(
+                    'option',
+                    { key: entry.id, value: entry.id, disabled: !entry.usable },
+                    entry.usable
+                      ? `${entry.id} — ${entry.kind} ${entry.host || ''}:${entry.port || ''}/${entry.database || ''}`
+                      : `${entry.id} — ${entry.kind} (${t('label.settingsNotPostgres')})`,
+                  ),
+                ),
+              ),
+            ),
+            data.dbSources && data.dbSources.ok === false
+              ? h('div', { className: 'e2e-muted' }, data.dbSources.error)
+              : null,
+          ),
+          h(
+            'div',
+            { className: 'e2e-settings-block' },
+            h('div', { className: 'e2e-settings-title' }, t('label.settingsIde')),
+            (data.targets || []).length === 0
+              ? h('div', { className: 'e2e-muted' }, t('empty.noTargets'))
+              : field(
+                  t('label.settingsTarget'),
+                  h(
+                    'select',
+                    { className: 'e2e-input', value: target, onChange: (event) => onTarget(event.target.value) },
+                    (data.targets || []).map((entry) => h('option', { key: entry.name, value: entry.name }, entry.name)),
+                  ),
+                ),
+            ide.error
+              ? h('div', { className: 'e2e-muted' }, ide.error)
+              : configurations.length === 0
+                ? h('div', { className: 'e2e-muted' }, t('empty.noConfigurations'))
+                : field(
+                    t('label.settingsConfiguration'),
+                    h(
+                      'select',
+                      { className: 'e2e-input', value: config, onChange: (event) => onConfig(event.target.value) },
+                      h('option', { value: '' }, t('label.settingsConfigurationNone')),
+                      configurations.map((entry) =>
+                        h(
+                          'option',
+                          { key: entry.name, value: entry.name },
+                          entry.description ? `${entry.name} — ${entry.description}` : entry.name,
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+          // Whether a case's setup/teardown SQL may change rows. It sits here as
+          // well as beside the run button because it is a decision about the
+          // database, and this is the sheet about the database.
+          h(
+            'div',
+            { className: 'e2e-settings-block' },
+            h(
+              'label',
+              { className: 'e2e-check-row' },
+              h('input', {
+                type: 'checkbox',
+                checked: allowWrites,
+                onChange: (event) => onAllowWrites(event.target.checked),
+              }),
+              h('span', null, t('label.allowWrites')),
+            ),
+            h('div', { className: 'e2e-hint' }, t('label.allowWritesHint')),
+          ),
+          h(
+            'div',
+            { className: 'e2e-scan-actions' },
+            h('div', { className: 'e2e-spacer' }),
+            h(Btn, { small: true, onClick: onClose }, t('action.cancel')),
+            h(
+              Btn,
+              { small: true, variant: 'primary', disabled: busy, onClick: onSave },
+              busy ? t('action.saving') : t('action.save'),
+            ),
+          ),
+        ),
+      )
+    }
+
     /* ---------- the panel ---------- */
 
     function MainPanel() {
@@ -2550,6 +2770,16 @@ window.__ModuleLoader__.load({
       const [scanPicked, setScanPicked] = React.useState(() => new Set())
       const [scanImporting, setScanImporting] = React.useState(false)
       const [scanImportError, setScanImportError] = React.useState(null)
+      // The settings sheet: which database a case may name, what the IDE calls the
+      // run configuration, and whether SQL writes are allowed. One sheet, because
+      // those three answers all describe the machine the cases run on.
+      const [settingsOpen, setSettingsOpen] = React.useState(false)
+      const [settingsState, setSettingsState] = React.useState({ status: 'idle', data: null, error: null })
+      const [settingsBusy, setSettingsBusy] = React.useState(false)
+      const [settingsTarget, setSettingsTarget] = React.useState('')
+      const [settingsDatabase, setSettingsDatabase] = React.useState('')
+      const [settingsSource, setSettingsSource] = React.useState('')
+      const [settingsConfig, setSettingsConfig] = React.useState('')
       const [reportText, setReportText] = React.useState(null)
       // Where a freshly generated document will be saved. Kept outside `selected`
       // because a generated case has no file on disk yet.
@@ -2954,6 +3184,80 @@ window.__ModuleLoader__.load({
         }
       }
 
+      /**
+       * Opens the settings sheet and asks the Host what it currently holds.
+       *
+       * The IDE is asked about the open project, because a run configuration
+       * belongs to a checkout: a list for some other project names configurations
+       * that this one does not have.
+       */
+      const openSettings = async () => {
+        setSettingsOpen(true)
+        setSettingsState({ status: 'loading', data: null, error: null })
+        try {
+          const query = project && project.projectPath ? `?projectPath=${q(project.projectPath)}` : ''
+          const data = await apiGet(`/settings${query}`)
+          const targets = data.targets || []
+          const databases = data.databases || []
+          // The sheet opens on the project the reader is standing in. A
+          // registry can describe several, and editing the first one's run
+          // configuration while looking at the second would be a quiet lie.
+          const wanted = project && Array.isArray(project.targets) && project.targets.length > 0 ? project.targets[0] : ''
+          const firstTarget = targets.find((entry) => entry.name === wanted) || (targets.length > 0 ? targets[0] : null)
+          setSettingsTarget(firstTarget ? firstTarget.name : '')
+          setSettingsConfig(firstTarget && firstTarget.configurationName ? firstTarget.configurationName : '')
+          setSettingsDatabase(databases.length > 0 ? databases[0].name : '')
+          const firstDatabase = databases.length > 0 ? databases[0] : null
+          setSettingsSource(firstDatabase && firstDatabase.from === 'db-mcp' ? firstDatabase.id : '')
+          setSettingsState({ status: 'ready', data, error: null })
+        } catch (error) {
+          setSettingsState({ status: 'error', data: null, error: error.message })
+        }
+      }
+
+      const pickSettingsTarget = (name) => {
+        setSettingsTarget(name)
+        const targets = (settingsState.data && settingsState.data.targets) || []
+        const found = targets.find((entry) => entry.name === name)
+        setSettingsConfig(found && found.configurationName ? found.configurationName : '')
+      }
+
+      const pickSettingsDatabase = (name) => {
+        setSettingsDatabase(name)
+        const databases = (settingsState.data && settingsState.data.databases) || []
+        const found = databases.find((entry) => entry.name === name)
+        setSettingsSource(found && found.from === 'db-mcp' ? found.id : '')
+      }
+
+      /**
+       * Writes what the sheet changed and re-reads it.
+       *
+       * Two kinds of edit go out together: the target's IDE run configuration and
+       * the database's dsh-db-mcp source. The answer carries the fresh settings,
+       * so the sheet stays open showing what the registry now says instead of a
+       * stale copy of what was just typed.
+       */
+      const saveSettingsSheet = async () => {
+        setSettingsBusy(true)
+        try {
+          const payload = { projectPath: project && project.projectPath ? project.projectPath : '' }
+          if (settingsTarget) payload.target = { name: settingsTarget, configurationName: settingsConfig }
+          if (settingsDatabase) {
+            payload.database = settingsSource
+              ? { name: settingsDatabase, from: 'db-mcp', id: settingsSource }
+              : { name: settingsDatabase, from: '' }
+          }
+          const result = await apiPost('/settings', payload)
+          setSettingsState({ status: 'ready', data: result.settings, error: null })
+          setNotice({ message: t('notice.settingsSaved') })
+          await refresh()
+        } catch (error) {
+          setSettingsState((current) => ({ ...current, error: error.message }))
+        } finally {
+          setSettingsBusy(false)
+        }
+      }
+
       const openReport = async (path) => {
         // The report directory holds both `<run>.md` and `<run>.json` for the same
         // run. The viewer shows markdown; the Host lists the markdown sibling of
@@ -3248,6 +3552,10 @@ window.__ModuleLoader__.load({
             ? h(Btn, { key: 'back', small: true, onClick: () => setOpenProject(null) }, t('action.backToProjects'))
             : null,
           h(Btn, { small: true, onClick: refresh }, t('action.refresh')),
+          // Where the registry is pointed at things — a database, an IDE run
+          // configuration — is one sheet, because those answers arrive from two
+          // catalogs and a reader looking for one of them is looking for both.
+          h(Btn, { small: true, onClick: openSettings }, t('action.settings')),
           !project
             ? h(
                 Btn,
@@ -3473,22 +3781,17 @@ window.__ModuleLoader__.load({
           { className: 'e2e-check-row' },
           h('input', {
             type: 'checkbox',
-            checked: allowWrites,
-            onChange: (event) => setAllowWrites(event.target.checked),
-          }),
-          h('span', null, t('label.allowWrites')),
-        ),
-        h('div', { className: 'e2e-hint' }, t('label.allowWritesHint')),
-        h(
-          'label',
-          { className: 'e2e-check-row' },
-          h('input', {
-            type: 'checkbox',
             checked: keepRunning,
             onChange: (event) => setKeepRunning(event.target.checked),
           }),
           h('span', null, t('label.keepRunning')),
         ),
+        // Whether setup/teardown SQL may write is a setting, not a run button:
+        // it belongs in the settings sheet next to the database it writes to,
+        // and a checkbox in two places is the same decision asked twice. But a
+        // run that is allowed to write has to say so where the run is started —
+        // otherwise the reader finds out from the report.
+        allowWrites ? h('div', { className: 'e2e-hint' }, t('label.allowWritesOn')) : null,
         problems
           ? h(
               'div',
@@ -3525,9 +3828,12 @@ window.__ModuleLoader__.load({
       // plan editor answers "what should this test say". They are separate pages
       // because a page that answers both answers neither well — and because the
       // list has to stay scannable while the editor has to stay wide.
+      // The case page is the one page that splits: the list gets the room that is
+      // left, and the run/database panels keep a fixed place at the bottom. A
+      // page-wide scroller here is what let the table's rows paint over them.
       const casesPage = h(
         'div',
-        { className: 'e2e-main' },
+        { className: 'e2e-main is-split' },
         h(CaseTable, {
           t,
           project,
@@ -3542,7 +3848,6 @@ window.__ModuleLoader__.load({
             setView('detail')
           },
           onScan: openScan,
-          onAddTests: () => setAdding((current) => !current),
           onRunAll: () => runAll(projectCases.map((entry) => entry.file)),
           running: busy === 'run-all' || Boolean(batch && batch.status === 'running'),
           checked,
@@ -3708,6 +4013,30 @@ window.__ModuleLoader__.load({
         runControls,
       )
 
+      // The settings sheet is reachable from both views: the landing page is where
+      // a reader arrives before a project is open, and the sheet is about the
+      // machine, not about the project. One element, rendered by both returns.
+      const settingsSheet = settingsOpen
+        ? h(SettingsDialog, {
+            t,
+            settings: settingsState,
+            target: settingsTarget,
+            database: settingsDatabase,
+            source: settingsSource,
+            config: settingsConfig,
+            allowWrites,
+            busy: settingsBusy,
+            error: settingsState.error,
+            onClose: () => setSettingsOpen(false),
+            onTarget: pickSettingsTarget,
+            onDatabase: pickSettingsDatabase,
+            onSource: setSettingsSource,
+            onConfig: setSettingsConfig,
+            onAllowWrites: setAllowWrites,
+            onSave: saveSettingsSheet,
+          })
+        : null
+
       // The landing view is the project table. It deliberately does not render the
       // editor or the case list: a page that answers "what is red" should not also
       // be a page that answers "what is the indentation of line 14".
@@ -3753,6 +4082,7 @@ window.__ModuleLoader__.load({
               },
             }),
           ),
+          settingsSheet,
         )
       }
 
@@ -3787,6 +4117,7 @@ window.__ModuleLoader__.load({
               onClose: () => setScanning(false),
             })
           : null,
+        settingsSheet,
       )
     }
 
@@ -4031,8 +4362,12 @@ window.__ModuleLoader__.load({
 .e2e-project-legend-item.is-planned::before { background: var(--dsw-alias-label-tertiary); }
 .e2e-project-when { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
 
-/* The case list: search + tabs + grouped rows. */
-.e2e-cases { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; }
+/* The case list: search + tabs + grouped rows. The rows live in their own
+   scroller (.e2e-cases-body) so the panels under the table — run, databases —
+   keep their place in the window instead of being pushed out of it. Without a
+   bounded, clipping box the rows painted straight over those panels. */
+.e2e-cases { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.e2e-cases-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: auto; padding-right: 2px; }
 .e2e-cases-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .e2e-search { flex: 0 1 260px; }
 .e2e-tabs {
@@ -4765,6 +5100,14 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-failure { font-size: 11px; color: var(--dsw-alias-state-error-primary); padding: 2px 4px; }
 
 .e2e-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; padding-right: 2px; }
+/* The case page: nothing here scrolls as a whole. The table owns the scroll and
+   the panels below it are pinned, so the window never hides the run controls. */
+.e2e-main.is-split { overflow: hidden; }
+.e2e-main.is-split > .e2e-section,
+.e2e-main.is-split > .e2e-batch,
+.e2e-main.is-split > .e2e-warning,
+.e2e-main.is-split > .e2e-report-view { flex: 0 0 auto; }
+.e2e-main.is-split > .e2e-add { flex: 0 0 auto; max-height: 40%; overflow: auto; }
 .e2e-editor { display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
 .e2e-editor-bar { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-bottom: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); }
 .e2e-file { font-size: 11.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 42ch; }
@@ -4843,6 +5186,12 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-scan-row:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-scan-row.is-picked { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
 .e2e-scan-actions { display: flex; align-items: center; gap: 6px; }
+.e2e-settings { width: min(560px, 100%); }
+.e2e-settings-block { display: flex; flex-direction: column; gap: 6px; padding: 9px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-base); }
+.e2e-settings-title { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.e2e-settings-field { display: flex; align-items: center; gap: 8px; }
+.e2e-settings-label { flex: 0 0 128px; font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+.e2e-settings-field .e2e-input { flex: 1 1 auto; min-width: 0; }
 .e2e-method { flex: 0 0 46px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.04em; color: var(--dsw-alias-brand-primary); }
 .e2e-endpoint-path { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-create { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px 8px; }
