@@ -19,6 +19,7 @@
  * confusing error per request.
  */
 import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -38,24 +39,58 @@ const VENDORED_PARSER = 'vendor/js-yaml.mjs'
  *
  * `import.meta.dirname` covers most runtimes; the rest are read from the string.
  */
+/** A loader may hand a module URL a cache-busting query; paths are not URLs. */
+function stripQuery(url) {
+  if (typeof url !== 'string') return url
+  const cut = url.search(/[?#]/)
+  return cut === -1 ? url : url.slice(0, cut)
+}
+
 function moduleDirs(url = import.meta.url) {
   const dirs = []
   if (typeof import.meta.dirname === 'string' && import.meta.dirname) dirs.push(import.meta.dirname)
-  if (typeof url === 'string' && url) {
-    if (url.startsWith('file:')) {
+  const path = stripQuery(url)
+  if (typeof path === 'string' && path) {
+    if (path.startsWith('file:')) {
       try {
-        dirs.push(dirname(fileURLToPath(url)))
+        dirs.push(dirname(fileURLToPath(path)))
       } catch {
         /* unreadable file URL; the path branches below may still apply */
       }
-    } else if (isAbsolute(url)) {
+    } else if (isAbsolute(path)) {
       // A filesystem path that was never a URL. Both separators, because a
       // Windows path can arrive with either.
-      dirs.push(dirname(url))
+      dirs.push(dirname(path))
     }
   }
   if (process.cwd()) dirs.push(process.cwd())
   return [...new Set(dirs.map((dir) => dir.replace(/[\\/]+$/, '')).filter(Boolean))]
+}
+
+/**
+ * The package's own directory, found through Node's resolver rather than by
+ * guessing from the module URL.
+ *
+ * The reload hook rewrites every module URL with `?dshE2eGen=N`, and some DSH
+ * loaders hand this module a relative or non-file URL on cold start. In that
+ * case the directory walk above can only reach `process.cwd()` — the profile
+ * directory, where no `vendor/` lives — and every YAML read in the plugin fails
+ * at once. But `require.resolve()` still walks node_modules from any sane base,
+ * and a package may resolve its own `exports` by name. That finds the installed
+ * `dsh-e2e` (a junction in the profile in the live app) no matter which shape
+ * the module URL had.
+ */
+function packageRoot(url = import.meta.url) {
+  const bases = [url, pathToFileURL(join(process.cwd(), '__dsh-e2e__.js')).href]
+  for (const base of bases) {
+    try {
+      const require = createRequire(stripQuery(base))
+      return dirname(require.resolve('dsh-e2e/package.json'))
+    } catch {
+      /* this base cannot resolve; the next one is rooted in node_modules */
+    }
+  }
+  return null
 }
 
 /**
@@ -66,20 +101,25 @@ function moduleDirs(url = import.meta.url) {
 /** Exposed for the probes: which files the parser would be read from, in order. */
 export function parserCandidates(options = {}) {
   const url = options.url === undefined ? import.meta.url : options.url
-  const dirs = options.dirs || moduleDirs(url)
+  const clean = stripQuery(url)
+  const dirs = options.dirs || moduleDirs(clean)
   const urls = []
   // Only a file URL can be a base. `new URL(relative, 'C:/pkg/src/yaml.js')`
   // succeeds and resolves against the drive letter as a scheme, which would put a
   // silently wrong candidate ahead of the right ones.
-  if (typeof url === 'string' && url.startsWith('file:')) {
+  if (typeof clean === 'string' && clean.startsWith('file:')) {
     try {
-      urls.push(new URL(`../${VENDORED_PARSER}`, url).href)
+      urls.push(new URL(`../${VENDORED_PARSER}`, clean).href)
     } catch {
       /* a malformed file URL; the directory walk below covers it */
     }
   }
+  // The resolver is the one answer that survives a rewritten module URL: the
+  // package is installed in the profile, not in `process.cwd()`'s vendor dir.
+  const root = packageRoot(options.url === undefined ? import.meta.url : options.url)
+  if (root) urls.push(pathToFileURL(join(root, VENDORED_PARSER)).href)
   for (const dir of dirs) {
-    for (const root of [dir, dirname(dir)]) urls.push(pathToFileURL(join(root, VENDORED_PARSER)).href)
+    for (const candidate of [dir, dirname(dir)]) urls.push(pathToFileURL(join(candidate, VENDORED_PARSER)).href)
   }
   return [...new Set(urls)]
 }

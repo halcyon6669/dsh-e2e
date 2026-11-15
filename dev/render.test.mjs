@@ -351,11 +351,13 @@ globalThis.fetch = async (url) => {
   requested.push(path)
   const body = path.startsWith('/projects')
     ? PROJECTS
-    : path.startsWith('/case?')
-      ? CASE_FILE
-      : path.startsWith('/report?')
-        ? PAST_REPORT
-        : BOOTSTRAP
+    : path.startsWith('/browse')
+      ? { ok: true, path: 'C:\\work', parent: 'C:\\', dirs: [{ name: 'Record', path: 'C:\\work\\Record' }], drives: ['C:\\'], error: null }
+      : path.startsWith('/case?')
+        ? CASE_FILE
+        : path.startsWith('/report?')
+          ? PAST_REPORT
+          : BOOTSTRAP
   return { ok: true, status: 200, json: async () => body }
 }
 
@@ -545,6 +547,29 @@ await test('the landing page offers to create a project, and the form appears in
       textOf(node).trim() === 'Create',
   )
   assert.ok(submit, 'the form has its own create button')
+  // The path can also be found in the file manager: a browser cannot read a
+  // local folder, so the Host walks one level at a time over /browse.
+  const browse = elementsOf(opened).find(
+    (node) =>
+      node.props &&
+      ['e2e-btn'].some((name) => String(node.props.className || '').split(' ').includes(name)) &&
+      textOf(node).trim() === 'Browse',
+  )
+  assert.ok(browse, 'the form offers a folder browser')
+  browse.props.onClick()
+  const browsing = await settle(() => mainComponent({}))
+  assert.match(textOf(browsing), /Pick a project folder/, 'the browser is a panel of its own')
+  assert.match(textOf(browsing), /Record/, 'the browser lists the Host folders')
+  const useFolder = elementsOf(browsing).find(
+    (node) => node.props && node.props.onClick && textOf(node).trim() === 'Use this folder',
+  )
+  assert.ok(useFolder, 'the browser can hand the current folder back to the form')
+  useFolder.props.onClick()
+  const chosen = await settle(() => mainComponent({}))
+  const chosenInputs = elementsOf(chosen).filter(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'),
+  )
+  assert.equal(chosenInputs[1].props.value, 'C:\\work', 'the chosen folder becomes the project path')
 })
 
 await test('the landing page has no per-card delete; deletion lives in edit mode', async () => {

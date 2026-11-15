@@ -252,6 +252,14 @@ window.__ModuleLoader__.load({
         'notice.projectCreated': 'Project {name} created. Base URL {baseUrl} was read from the project; cases live in {dir}.',
         'field.projectName': 'Project name (letters, digits, dashes)',
         'field.projectPath': 'Project path (required — the Base URL is read from its application.yml)',
+        'action.browse': 'Browse',
+        'action.useFolder': 'Use this folder',
+        'action.up': 'Up',
+        'label.browseTitle': 'Pick a project folder',
+        'label.browseCurrent': 'Current folder: {path}',
+        'label.browseDrives': 'Drives',
+        'label.browseEmpty': 'No subfolders here.',
+        'state.browseLoading': 'Reading folders…',
         'notice.projectsDeleted': '{count} project(s) deleted.',
         'notice.projectsPartlyDeleted': '{done} deleted, {failed} failed: {errors}',
         'label.pickProjects': 'Pick this project',
@@ -503,6 +511,14 @@ window.__ModuleLoader__.load({
         'notice.projectCreated': '项目 {name} 已创建。Base URL（{baseUrl}）是从项目里读出来的；用例放在 {dir}。',
         'field.projectName': '项目名（字母、数字、短横线）',
         'field.projectPath': '项目路径（必填 — Base URL 会从它的 application.yml 读取）',
+        'action.browse': '浏览',
+        'action.useFolder': '使用此文件夹',
+        'action.up': '上一级',
+        'label.browseTitle': '选择项目文件夹',
+        'label.browseCurrent': '当前文件夹：{path}',
+        'label.browseDrives': '磁盘驱动器',
+        'label.browseEmpty': '这里没有子文件夹。',
+        'state.browseLoading': '正在读取文件夹…',
         'notice.projectsDeleted': '已删除 {count} 个项目。',
         'notice.projectsPartlyDeleted': '已删除 {done} 个，{failed} 个失败：{errors}',
         'label.pickProjects': '选中这个项目',
@@ -635,6 +651,61 @@ window.__ModuleLoader__.load({
         h('h3', { className: 'e2e-section-title' }, props.title),
         props.extra ? h('div', { className: 'e2e-section-extra' }, props.extra) : null,
         props.children,
+      )
+    }
+
+    /**
+     * A read-only file manager for the create-project form. The Host walks the
+     * filesystem one directory at a time; this shows that walk and lets the
+     * reader take the current folder as the project path.
+     */
+    function FolderPicker(props) {
+      const { t, picker } = props
+      return h(
+        'div',
+        { className: 'e2e-picker-backdrop', onClick: props.onClose },
+        h(
+          'div',
+          { className: 'e2e-picker', onClick: (event) => event.stopPropagation() },
+          h('h3', { className: 'e2e-section-title' }, t('label.browseTitle')),
+          h('div', { className: 'e2e-picker-path' }, t('label.browseCurrent', { path: picker.path || '' })),
+          picker.error ? h('div', { className: 'e2e-warning' }, picker.error) : null,
+          picker.loading ? h('div', { className: 'e2e-muted' }, t('state.browseLoading')) : null,
+          picker.drives && picker.drives.length > 0
+            ? h(
+                'div',
+                { className: 'e2e-picker-drives' },
+                h('span', { className: 'e2e-muted' }, t('label.browseDrives')),
+                picker.drives.map((drive) =>
+                  h('button', { key: drive, type: 'button', className: 'e2e-btn is-small', onClick: () => props.onBrowse(drive) }, drive),
+                ),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'e2e-picker-list' },
+            picker.loading
+              ? null
+              : picker.dirs.length === 0
+                ? h('div', { className: 'e2e-muted' }, t('label.browseEmpty'))
+                : picker.dirs.map((dir) =>
+                    h(
+                      'button',
+                      { key: dir.path, type: 'button', className: 'e2e-picker-row', onClick: () => props.onBrowse(dir.path) },
+                      h('span', null, dir.name),
+                      h('span', { className: 'e2e-muted' }, dir.path),
+                    ),
+                  ),
+          ),
+          h(
+            'div',
+            { className: 'e2e-picker-actions' },
+            h(Btn, { small: true, disabled: !picker.parent, onClick: () => props.onBrowse(picker.parent) }, t('action.up')),
+            h('div', { className: 'e2e-spacer' }),
+            h(Btn, { small: true, onClick: props.onClose }, t('action.cancel')),
+            h(Btn, { small: true, variant: 'primary', disabled: !picker.path, onClick: () => props.onChoose(picker.path) }, t('action.useFolder')),
+          ),
+        ),
       )
     }
 
@@ -2442,6 +2513,9 @@ window.__ModuleLoader__.load({
       const [creating, setCreating] = React.useState(null) // 'project' on the landing page, a draft file name inside one
       // The create-project form's draft. Reset whenever the form closes.
       const [projectDraft, setProjectDraft] = React.useState({ name: '', projectPath: '' })
+      // The create form's folder picker. Null when closed; otherwise the folder
+      // being browsed and its entries, loaded from the Host one level at a time.
+      const [folderPicker, setFolderPicker] = React.useState(null)
       const [reportText, setReportText] = React.useState(null)
       // Where a freshly generated document will be saved. Kept outside `selected`
       // because a generated case has no file on disk yet.
@@ -2896,6 +2970,24 @@ window.__ModuleLoader__.load({
         }
       }
 
+      // The folder picker walks the Host filesystem one directory at a time: a
+      // browser cannot read a local path, but /browse can. A folder the Host
+      // cannot enter is simply left out of the list.
+      const browseFolder = async (path) => {
+        setFolderPicker({ path: path || null, dirs: [], drives: [], loading: true, error: null })
+        try {
+          const data = await apiGet(`/browse${path ? `?path=${q(path)}` : ''}`)
+          setFolderPicker({ path: data.path || null, parent: data.parent || null, dirs: data.dirs || [], drives: data.drives || [], loading: false, error: data.error || null })
+        } catch (error) {
+          setFolderPicker({ path: path || null, dirs: [], drives: [], loading: false, error: error.message })
+        }
+      }
+
+      const chooseFolder = (path) => {
+        setProjectDraft((draft) => ({ ...draft, projectPath: path }))
+        setFolderPicker(null)
+      }
+
       // Creating a project writes the registry and makes a case directory on the
       // Host; the panel then refreshes so the new card is on the table. The name
       // the reader typed becomes the target name cases write in `env.target`,
@@ -3203,6 +3295,7 @@ window.__ModuleLoader__.load({
                 value: projectDraft.projectPath,
                 onChange: (event) => setProjectDraft({ ...projectDraft, projectPath: event.target.value }),
               }),
+              h(Btn, { small: true, onClick: () => browseFolder(projectDraft.projectPath.trim() || null) }, t('action.browse')),
               h('div', { className: 'e2e-spacer' }),
               h(Btn, { small: true, onClick: () => setCreating('') }, t('action.cancel')),
               h(
@@ -3556,6 +3649,9 @@ window.__ModuleLoader__.load({
           { className: 'e2e-root' },
           h('style', null, STYLE),
           header,
+          folderPicker
+            ? h(FolderPicker, { t, picker: folderPicker, onBrowse: browseFolder, onChoose: chooseFolder, onClose: () => setFolderPicker(null) })
+            : null,
           notice
             ? h(
                 'div',
@@ -4664,6 +4760,14 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-method { flex: 0 0 46px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.04em; color: var(--dsw-alias-brand-primary); }
 .e2e-endpoint-path { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-create { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px 8px; }
+.e2e-picker-backdrop { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dsw-alias-bg-base) 80%, transparent); }
+.e2e-picker { width: min(560px, 90vw); max-height: 70vh; display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); box-shadow: 0 12px 32px color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent); }
+.e2e-picker-path { font-size: 11.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.e2e-picker-drives { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.e2e-picker-list { flex: 1 1 auto; min-height: 120px; overflow: auto; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 4px; background: var(--dsw-alias-bg-base); }
+.e2e-picker-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; border: 0; border-radius: 6px; background: transparent; color: inherit; padding: 6px 8px; cursor: pointer; font-size: 12px; }
+.e2e-picker-row:hover { background: var(--dsw-alias-bg-layer-2); }
+.e2e-picker-actions { display: flex; gap: 6px; align-items: center; }
 `
 
     return {
