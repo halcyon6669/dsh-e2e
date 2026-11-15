@@ -1,0 +1,54 @@
+browser layer: real Chrome, real screenshots, no pretending
+
+A case can now carry a `browser` block and the runner will drive a real
+headless Chrome or Edge through it: fill, click, press, wait, assert on the
+page, and take screenshots. The HTTP verdict and the page verdict end up in
+one `checks` array, because one run has one verdict — not one per layer.
+
+The client speaks Chrome DevTools Protocol directly over WebSocket. No
+Playwright, no Puppeteer, no npm install: the plugin stays zero-dependency,
+which is the same reason the PG wire protocol and the YAML parser are
+hand-written.
+
+Three decisions worth naming:
+
+- One step is one action. A step with two keys is refused, so every line in
+  the report corresponds to one thing the reader did.
+- An assertion without an expectation is refused. `assertText` needs
+  `contains`; an assertion that cannot fail occupies the space where a check
+  should be.
+- The journey runs after the request, not before. The page is being asked
+  what the user sees once the service has finished, so a screenshot taken
+  before the request would only show what setup left behind.
+
+Screenshots land in `<reports>/shots/<runId>/` and are served by `GET /shot`,
+the one route that does not return JSON — and the one place where an
+explicit `{__raw: true}` marker beats guessing from the shape of a return
+value. Path traversal is refused with 403, like every other path-taking
+route here.
+
+There is no video. This machine has no ffmpeg, so the honest thing is a
+frame sequence (`shot-01-loaded.png`), named as such in the docs, the panel
+and the report. The browser console is captured; the network waterfall is
+not, and that page is called "console" rather than "network" for the same
+reason.
+
+Verified end to end: a temporary static page, a real HTTP request, a real
+Chrome, `verdict=passed`, four checks (two HTTP, two browser), two PNGs
+served back through `/shot` at 7773 bytes, and `C:\Windows\win.ini` refused.
+
+- src/browser.js: CDP client, screenshot/click/fill/press/wait/waitFor/
+  assertText/assertVisible, temp profile cleaned up in `finally`
+- src/case.js: `browser` block with per-step one-action rule
+- src/runner.js: step 6c, after the probes and before the database
+- src/guard.js: an absolute `browser.url` goes through the same host and
+  production checks as `baseUrl` — a page that skips the guard is a hole
+- src/report.js: a `## Browser` section with pictures and console lines
+- src/plan.js: the journey is a step of its own, and a UI assertion counts
+  as an assertion
+- src/panel.js: `GET /shot`, `artifactDir` so pictures sit beside reports
+- client.js: a screenshots tab that only exists when a run took any
+- dev/browser.test.mjs: twelve shape tests, three real-Chrome journeys
+- dev/scope.test.mjs: WebSocket is a global now
+
+Version 0.7.0.

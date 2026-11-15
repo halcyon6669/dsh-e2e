@@ -123,30 +123,31 @@
 | `index.js` | 150 | 插件入口，`apply(ctx, config)` | 模块解析钩子给整棵依赖图加 generation，改任何 `src/*.js` 都不必重启 DSH |
 | `client.js` | 3436 | 浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划 + 侧栏入口 | 纯手写 bundle，React 来自宿主模块表，见 §16 |
 | `src/host.js` | 306 | 组装、示例播种、`/status`、客户端半自检 | 面板首次打开不能是空目录，见 §16.1 |
-| `src/panel.js` | 941 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
+| `src/panel.js` | 994 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
 | `src/store.js` | 322 | 用例与报告的唯一磁盘入口 | 路径必须落在 root 内，见 §16.2 |
 | `src/projects.js` | 398 | 项目表：按 origin 归并 target、汇总最近结果与分组 | 不存储、只推导；见 §5.10 |
-| `src/plan.js` | 139 | 步骤描述、状态判定、组内结论 | 纯函数，Host 算一次浏览器不重算；见 §5.11 |
+| `src/plan.js` | 156 | 步骤描述、状态判定、组内结论 | 纯函数，Host 算一次浏览器不重算；见 §5.11 |
 | `src/edit.js` | 253 | 表单 → YAML 的行级补丁 | 不重新序列化，见 §5.12 |
 | `src/ai.js` | 310 | 生成用例、解释失败 | 模型永不参与判定，见 §16.4 |
 | `src/scan.js` | 539 | 读 Spring 源码：端点、DTO 约束、实体表名 | 只读，注解解析不引依赖，见 §16.5 |
 | `src/scaffold.js` | 294 | 端点 → 用例骨架 | 只生成骨架不猜断言，见 §16.5 |
 | `src/tools.js` | 525 | 注册 7 个工具 | 与面板共用 store，不重复实现 |
-| `src/case.js` | 708 | YAML 解析与规范化 | 未知字段直接报错（见 §5.4） |
+| `src/case.js` | 851 | YAML 解析与规范化 | 未知字段直接报错（见 §5.4） |
 | `src/registry.js` | 389 | target / 数据库注册表 | 支持 `from: db-mcp` 复用已存数据源，见 §5.7 |
 | `src/resolve.js` | 158 | 用例 + registry → 实际连接 | 三层合并，缺配置时列出可用名字 |
-| `src/guard.js` | 188 | 环境护栏 | 校验解析后的地址（见 §9） |
-| `src/runner.js` | 641 | 流水线编排 | `finally` 保证 teardown 与停服 |
+| `src/guard.js` | 220 | 环境护栏 | 校验解析后的地址（见 §9） |
+| `src/runner.js` | 712 | 流水线编排 | `finally` 保证 teardown 与停服 |
+| `src/browser.js` | 539 | CDP 客户端：起 Chrome、按步骤操作、截图 | 零依赖 WebSocket，见 §5.16 |
 | `src/service.js` | 271 | 启停服务、跟随日志 | 端口占用预检（见 §6.2） |
 | `src/idea.js` | 275 | IDEA MCP 客户端 | 手写 SSE + JSON-RPC，不引依赖 |
 | `src/http.js` | 137 | HTTP 客户端 | 用 `node:http` 而非 `fetch`（见 §4.2） |
 | `src/pg.js` | 455 | PostgreSQL 线协议 | 手写，含 SCRAM-SHA-256（见 §4.2） |
 | `src/db.js` | 149 | 数据库门面 | 强制只读断言 |
 | `src/assert.js` | 254 | 断言引擎 | 每条断言返回统一结构（见 §7.2） |
-| `src/report.js` | 338 | 报告渲染 | 双格式：JSON + Markdown |
+| `src/report.js` | 378 | 报告渲染 | 双格式：JSON + Markdown |
 | `src/yaml.js` + `vendor/js-yaml.mjs` | 43 + 104KB | YAML 解析与输出 | 内置 vendor，见 §4.2 |
 
-`index.js` 151 行、`client.js` 3436 行（浏览器半，手写 bundle，含样式）。合计约 **11,300 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
+`index.js` 151 行、`client.js` 3534 行（浏览器半，手写 bundle，含样式）。合计约 **12,300 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
 
 `client.js` 涨得最快，而它没有任何编译期检查：`node --check` 只看语法，看不见一个改了名却没跟着改的变量。这就是 `dev/render.test.mjs` 存在的原因（§17），也是为什么前端每加一个页面都要同时加渲染探针。
 
@@ -244,7 +245,7 @@ teardown:
 
 ### 5.2 顶层字段
 
-只有这 14 个，多写一个就报错：
+只有这 15 个，多写一个就报错：
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
@@ -261,7 +262,10 @@ teardown:
 | `setup` | | 前置准备，见 §5.5 |
 | `request` | ✅ | 被测请求 |
 | `expect` | ✅ | 断言，见 §5.6 |
+| `browser` | | UI 旅程：打开页面、点、填、断言、截图，见 §5.16 |
 | `teardown` | | 收尾清理 |
+
+`browser` 是唯一「不写就是 `null`」的块：没有它意味着**这条用例没有 UI 要查**，而不是「查了但没话说」。这两句话在报告里长得不一样，前端靠它决定要不要给详情页加截图页签。
 
 `caseId` 与 `id` 是两件事，这是刻意的：
 
@@ -721,6 +725,36 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 
 实现上前后两半存在两个地方（`evidence.database` 是终态、`evidence.snapshots` 是配对），因为 `assertDatabase` 需要的是终态。配对发生在第 7 步的同一个循环里，用 `for (const [index, expectation] of ...entries())` 按序号对齐——**第一版这里漏了 `index` 的解构**，`node --check` 和全部单测都通过，只有真机跑一次才炸出 `fatal: ReferenceError: index is not defined`（见 §11.14）。
 
+### 5.16 浏览器旅程：为什么它排在请求之后
+
+一个 `browser` 块让用例打开真页面、点真按钮、拍真截图。它回答的是 HTTP 断言回答不了的那个问题：**服务干完活之后，用户看到的是什么。**
+
+```yaml
+browser:
+  url: /sign-in
+  viewport: { width: 1000, height: 700 }
+  steps:
+    - screenshot: loaded
+    - fill: { selector: '#user', value: ada }
+    - click: '#go'
+    - assertText: { selector: '#out', contains: welcome ada, description: the page greets the user }
+    - screenshot: after click
+```
+
+四件事是刻意的：
+
+**一步一件事。** 每个步骤恰好一个 key（`click` / `fill` / `screenshot` / `assertText` / `assertVisible` / `press` / `wait` / `waitFor`）。两个 key 的步骤会被拒：`browser.steps[0] has 2 keys (click, fill); each step is one action so the report can name it`。报告里每一行要能对应读者做的一件事。
+
+**没有期望的断言会被拒。** `assertText` 缺 `contains` 报 `needs "contains" — an assertion that does not say what it expects cannot fail`。一个永远通过的 UI 断言比没有断言更糟，因为它占用了「已检查」这个位置。
+
+**它跑在请求之后**（第 6c 步，在数据库终态之前）。页面被问的是「服务干完活之后用户看到什么」；截图拍在请求前只会拍到 setup 留下的状态，那是最容易通过的一张图。
+
+**它的 check 和 HTTP 的进同一个数组。** 一次运行只有一个 verdict，不是每层一个。浏览器起不来是这个用例的失败，但它不该抹掉已经建立的 HTTP 结论——报告同时说清 HTTP 答了什么和浏览器为什么没跑。
+
+**为什么不猜像素、不做视觉回归**：本工具不知道页面「应该」长什么样，那是设计稿的事。截图在这里的作用是**证据**，不是判定——人打开失败报告时，先看到的是请求和断言，再看到一张能证明当时屏幕确实是什么样子的图。
+
+**为什么没有视频**：本机没有 ffmpeg，编码 mp4 就得引入一个几百 MB 的依赖，而它换来的是把一串 PNG 打包成一个文件。所以诚实降级为**帧序列**：`screenshot` 步骤按顺序落盘成 `shot-01-loaded.png`、`shot-02-after-click.png`，面板里按顺序网格展示。这不是视频，文档里也不叫它视频。
+
 ---
 
 ## 6. 执行流水线
@@ -740,6 +774,7 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 9.  response.received 收响应
 10. logs.collected   按 trace id 收日志
 11. probe.sent       发 expect.calls 里的跟进请求
+11b. browser.journey 起真浏览器，按 steps 逐条执行，截图落盘
 12. database.asserted 执行只读断言查询
 13. teardown.http / teardown.sql  清理
 14. service.stopped  停服务，轮询确认端口释放
@@ -748,6 +783,8 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 `resolve` 在 guard 之前，这个顺序是必须的：用例里已经没有地址了，**护栏能检查的唯一地址是解析出来的那个**。先解析再检查，检查的才是真正会被拨号的目标。
 
 第 12 步（`database.asserted`）每条数据库断言其实执行了**两次查询**：一次在第 7 步之后、请求之前（`snapshot`），一次在请求之后。两次成对写进 `evidence.snapshots`，理由见 §5.15——一次查询只能告诉你「断言成不成立」，两次才能告诉你「这条用例到底改动了什么」。
+
+第 6c 步（runner 自己的编号；在上表里位于第 11 步 probe 之后、第 12 步数据库终态之前）只在用例有 `browser` 块时执行。理由见 §5.16：页面被问的是「服务干完活之后用户看到什么」，所以排在请求与探针之后；而它的 check 和 HTTP 的进同一个 `checks[]`，一次运行只有一个 verdict。
 
 ### 6.1 为什么先启服务再连数据库
 
@@ -917,7 +954,7 @@ const ALLOWED_HOST_PATTERNS = [
 const PRODUCTION_HINTS = ['prod','production','live','prd','online','master','release','生产']
 ```
 
-四道检查，全部针对**解析之后**的目标：
+五道检查，全部针对**解析之后**的目标：
 
 1. **主机必须是 loopback 或私网**。公网地址需要 `allowRemote: true` 显式放开。
 2. **名字不能像生产**。`baseUrl`、数据库名、数据库主机名里出现 `prod`/`生产` 等一律拒绝，即使 `allowRemote` 也不行。因为「允许远程」和「允许打生产」是两件事。
@@ -925,6 +962,14 @@ const PRODUCTION_HINTS = ['prod','production','live','prd','online','master','re
 
    这条检查会**读取 `sqlFile` 的内容**，不只是内联的 `sql:`。只查内联 SQL 的护栏等于没有护栏：把 `DELETE` 放进 `fixtures/reset.sql` 就绕过去了。因此 `checkTargets()` 是 async 的。
 4. **IDE 端口合法**。
+5. **浏览器块指向的页面也要过前三条**。`browser.url` 是绝对 URL 时它会**绕过 `baseUrl`**，也就是绕过已经检查过的那个目标。所以 `absoluteBrowserUrl()` 把绝对 URL 单独拎出来，用同一套 `ALLOWED_HOST_PATTERNS` 与 `PRODUCTION_HINTS` 再检查一次：
+
+   ```
+   the browser block points at 10.0.5.11, which is not loopback or a private address (pass allowRemote to override)
+   the browser block looks like a production page: https://shop.example.com/login
+   ```
+
+   相对路径（`url: /sign-in`）返回 `null`，由已经检查过的 `baseUrl` 兜底——在这里重新拼一遍就等于重实现 `joinUrl`，并且很可能把两个斜杠中的一个弄错。**「被测页面」如果是唯一没被检查的地址，那整个护栏就有一个洞，而且是最容易踩的那个洞。**
 
 **为什么护栏校验解析后的地址而不是 YAML？**
 
@@ -1187,6 +1232,20 @@ fatal: ReferenceError: index is not defined
 所以这个探针现在覆盖的不只是浏览器半：`client.js`、`index.js`、`src/*.js` 全部在检查范围内，并且它自己带两条反向测试（兄弟作用域的声明必须不可见、闭包里的必须可见），防止它松到永远通过。
 
 > 一个只抓得到你已经修完的 bug 的检查，是装饰。
+
+### 11.15 浏览器层：没有 ffmpeg 就不叫它视频
+
+**真视频记录没有做，而且不打算假装做了。** 本机 `Get-Command ffmpeg` 是空的，编码 mp4 要么引入一个几百 MB 的依赖，要么自己写一个 H.264 编码器。两者都不值得：它们换来的是「把一串 PNG 打包成一个文件」。
+
+所以 `screenshot` 步骤产出的是**帧序列**：`shot-01-loaded.png`、`shot-02-after-click.png`，按步骤顺序编号。面板里按顺序网格展示，点开看大图。文档里也不叫它视频。
+
+如果以后要真录屏，正确的做法是接 CDP 的 `Page.startScreencast`（它吐 JPEG 帧，仍然需要编码），而不是把一个假的播放器塞进详情页。
+
+### 11.16 只有控制台日志，没有网络瀑布
+
+`Log.enable` 收的是页面自己的 console（`console.log`、未捕获异常、资源加载失败），**不是** `Network.*` 事件。所以详情页的「控制台」页签看得见 `Failed to load resource: 404`，看不见「这次请求花了 380ms」。
+
+这不是偷懒：一个用例的失败理由几乎总是「页面上没有出现该出现的东西」，而 console 是那条线索；网络瀑布是性能分析的工具，性能不是这个工具的判定对象。列进缺口而不是假装做过。
 
 ---
 
@@ -1460,8 +1519,66 @@ _no rows_
 
 **这一节的存在本身抓到过一个真 bug**：加完前后对比后第一次真机运行，报告是 `verdict: failed`、`checks: 3` 全 `ok`、`failedChecks: []`、`fatal: ReferenceError: index is not defined`。一条用例同时"全部断言通过"和"失败"，因为第 7 步的第二个循环读了一个自己没声明的 `index`（详见 §11.14）。修完后同一份报告变成 `passed / 9 checks / 2 snapshots`。
 
----
+### 12.12 浏览器层：真 Chrome、真 HTTP、真 PNG
 
+验证方式：用一个临时 Node 静态服务器（`dev/_static.mjs`，随机端口 3337）提供一张「输入名字 → 按 Go → 显示 welcome」的页面，写一条带 `browser` 块的用例，**通过面板 API 真跑一次**。
+
+用例（`zz-ui-sign-in.yaml`，验证后已删除）：
+
+```yaml
+id: ui-sign-in
+env: { baseUrl: 'http://127.0.0.1:3337', serviceRequired: false }
+request: { method: GET, path: / }
+expect: { response: { status: 200, body_contains: Sign in } }
+browser:
+  url: /
+  viewport: { width: 1000, height: 700 }
+  steps:
+    - screenshot: loaded
+    - fill: { selector: '#user', value: ada }
+    - click: '#go'
+    - assertText: { selector: '#out', contains: welcome ada, description: the page greets the user by name }
+    - assertVisible: '#title'
+    - screenshot: after click
+```
+
+`POST /run-all {"files":["zz-ui-sign-in.yaml"],"allowWrites":true}` → `batch-1794708851765-2`：
+
+```
+status=finished passed=1 failed=0
+case=CASE-ui-sign-in verdict=passed checks=4 failed=0
+```
+
+四条 check 全 ok，**两条来自 HTTP、两条来自浏览器**：
+
+```
+ok  response.status            = 200
+ok  response.body contains     = <!doctype html>…
+ok  the page greets the user by name = welcome ada
+ok  browser visible #title     = visible
+```
+
+`evidence.browser`：
+
+```
+url         http://127.0.0.1:3337
+shots       shot-01-loaded.png, shot-02-after-click.png
+console     ["Failed to load resource: the server responded with a status of 404 (Not Found)", "greeted ada"]
+```
+
+那条 404 是 favicon，真实噪音，如实记录——它正是 console 该干的事。`steps` 是 `request.sent -> response.received -> browser.navigate -> browser.loaded -> browser.screenshot -> browser.fill -> browser.click -> browser.screenshot -> browser.finished`。
+
+`GET /shot?path=<escaped>` 返回 **7773 字节**的 PNG，`read_image` 看到的就是「输入框里 ada、页面显示 welcome ada」的真实截图。路径穿越被拒：
+
+```
+GET /shot?path=C:\Windows\win.ini  →  403
+C:\Windows\win.ini is not inside C:\Users\administor-\.dsh\e2e\reports\shots;
+screenshots are only served from the report directory
+```
+
+**踩到的坑**：第一次跑 `fatal: connect ECONNREFUSED 127.0.0.1:3337`——静态服务器是用 `Start-Job` 起的，随那个 shell 进程一起死了。每次 `pwsh` 调用都是独立进程，长跑的服务必须用后台作业起。
+
+---
 
 ## 13. 工具接口
 
@@ -1580,6 +1697,7 @@ _no rows_
 | GET | `/reports` | 报告列表 |
 | GET | `/projects` | 项目表：按服务归并、带最近结果与活动时间（见 §5.10） |
 | GET | `/report?path=&format=` | 读一份报告 |
+| GET | `/shot?path=` | 读一张截图（**唯一返回二进制的路由**，只服务 `<reports>/shots` 里的文件，见 §5.16） |
 | POST | `/run` | 启动运行，**立刻返回 run id** |
 | GET | `/run?id=` | 轮询运行状态 |
 | POST | `/explain` | 让模型解释失败（不改判定） |
@@ -1593,6 +1711,8 @@ _no rows_
 `/bootstrap` 存在的理由：面板一打开需要用例、registry、报告、IDE 设置四样东西。四个请求就是四次往返、四次可能的失败、四份要分别处理的 loading 状态。一个请求换来一个「要么全有要么全无」的初始状态，前端代码简单得多。用例列表里还带一份 `groups`（按 `group` 分组、带场景计数与 `summary`），前端不需要自己再算一遍分组——算两遍就会有一天算得不一样。同理每条用例的状态由 `/projects` 算好下发（§5.11）。
 
 `POST /case` 的返回值里必须带 `yaml`：保存可能插入了一行 `caseId:`，编辑器要显示磁盘上真正的内容，否则下一次保存会把刚分配的那行丢掉。`POST /case-fields` 同样返回 `yaml`，理由相同。
+
+`GET /shot` 是唯一不是 JSON 的路由，所以它的例外是**显式**的：handler 返回 `{__raw: true, contentType, buffer}`，`handle()` 认这个标记走 `sendBytes()` 而不是 `sendJson()`。不靠「看返回值的形状猜」是因为猜错的那天你会得到一份把 PNG 字节当 JSON 序列化的响应。它只服务 `reportRoot()/shots` 内的文件，越界一律 403——和这个文件里其他所有按路径读取的路由同一条规则，也是它不叫 `/file?path=` 的原因。
 
 **带 `mutate: true` 的路由**（`POST /case`、`DELETE /case`、`POST /next-case-id`、`POST /case-fields`、`POST /validate`、`POST /run`、`POST /run-all`、`POST /explain`、`POST /generate`、`POST /scan`、`POST /scaffold`）会校验 `Origin` 头与 `Host` 一致，否则 403。这挡住跨站请求伪造——一个本地 HTTP 服务如果可以被任意网页 POST，那就等于把「跑测试、写文件」的能力开放给了浏览器里打开的每一个标签页。没有 `Origin` 头的请求（curl、脚本）放行，因为它们不是 CSRF 的载体。
 
@@ -1624,8 +1744,9 @@ dsh-e2e/
 │   ├── case.js              YAML 解析与规范化
 │   ├── registry.js          target / 数据库注册表 + dsh-db-mcp 导入
 │   ├── resolve.js           用例 + registry → 实际连接
-│   ├── guard.js             环境护栏（校验解析后的地址）
+│   ├── guard.js             环境护栏（校验解析后的地址，含 browser.url）
 │   ├── runner.js            14 步流水线
+│   ├── browser.js           CDP 客户端：起 Chrome、按步骤操作、截图（零依赖）
 │   ├── service.js           启停服务 + 日志跟随
 │   ├── idea.js              IDEA MCP 客户端
 │   ├── http.js              HTTP 客户端
@@ -1637,7 +1758,7 @@ dsh-e2e/
 ├── vendor/
 │   └── js-yaml.mjs          零依赖 ESM（104KB）
 ├── examples/                示例用例 + 示例 registry
-├── dev/                     十个套件 + 真环境探针
+├── dev/                     十二个套件 + 真环境探针
 └── docs/
     ├── design.md            本文档
     └── gaussdb_connection_and_compatibility.md
@@ -1821,3 +1942,11 @@ the case contains INSERT/UPDATE/DELETE statements but database writes are disabl
 > **只记录结果不算证据，能对比才算。**
 
 「期望 1 行，实际 0 行」是一个结论，不是一个解释。同样的结论对应三种完全不同的修法（改服务、改断言、改 setup），而区分它们的唯一信息是**请求之前是什么样**——所以每条数据库断言跑两次（§5.15）。这条原则的一般形式是：证据要能让读者自己得出你得到的结论，而不是只能选择相信它。
+
+最后一条是关于**缺口**的，它只出现了一次，但值得单独立一条，因为它决定这个工具会不会开始说谎：
+
+> **做不到的事情，说做不到，不要换个名字假装做到了。**
+
+本机没有 ffmpeg，所以浏览器层产出的是帧序列，文档里、面板里、`design.md` 里都不叫它视频（§11.15）。console 收到的是页面 `console.*`，不是网络瀑布，所以那一页就叫「控制台」，不叫「网络」（§11.16）。WireMock 只解析不执行，那就写在「已知缺口」第一条里，而不是标一个绿色的「已支持」。
+
+这条原则的代价是清单会变长，收益是清单上剩下的每一条都可以信。

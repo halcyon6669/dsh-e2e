@@ -15,7 +15,7 @@
  *      never disagree about what a run produced.
  */
 import { readFile, writeFile } from 'node:fs/promises'
-import { basename, dirname, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadCaseFile, CaseError, withCaseId } from './case.js'
 import { runCase, redactReport } from './runner.js'
@@ -79,6 +79,24 @@ function sendJson(response, status, body) {
     'content-length': Buffer.byteLength(payload),
   })
   response.end(payload)
+}
+
+/**
+ * Sends bytes rather than JSON.
+ *
+ * The one thing in this API that is not JSON is a screenshot, and it has to stay
+ * bytes: a PNG base64'd into a JSON field turns a 60KB image into 80KB of text
+ * that the browser has to decode before it can decode the image.
+ */
+function sendBytes(response, status, buffer, contentType) {
+  response.writeHead(status, {
+    'content-type': contentType,
+    'content-length': buffer.length,
+    // Screenshots are immutable once written — the file name carries the run id —
+    // so the browser may keep them, and re-opening a report is instant.
+    'cache-control': 'private, max-age=300',
+  })
+  response.end(buffer)
 }
 
 /**
@@ -526,6 +544,10 @@ export function createPanel({ ctx, config = {}, state }) {
         ...guardOptions,
         resolved,
         config,
+        // Screenshots land in `<reports>/shots` so the panel can serve them from
+        // one place it already knows, and so a report and its pictures travel
+        // together when the directory is copied off the machine.
+        artifactDir: join(reportRoot({ config, state }), 'shots'),
         ideHost: config.ideHost || '127.0.0.1',
         ideTimeoutMs: config.ideTimeoutMs || 60000,
         keepServiceRunning: input.keepServiceRunning === true || config.keepServiceRunning === true,
@@ -752,6 +774,33 @@ export function createPanel({ ctx, config = {}, state }) {
     } },
     { method: 'GET', path: '/reports', handler: async () => listReports({ config, state }) },
     { method: 'GET', path: '/projects', handler: async () => listProjects({ config, state, env: process.env }) },
+    {
+      method: 'GET',
+      path: '/shot',
+      // The only binary route. A report names its screenshots by absolute path;
+      // the browser cannot read a file path, so this serves the bytes. The path
+      // is checked against the shots directory before any I/O — the same rule as
+      // every other path in this file, and the reason it is not `/file?path=`.
+      handler: async (_body, url) => {
+        const shotsRoot = join(reportRoot({ config, state }), 'shots')
+        const wanted = url.searchParams.get('path')
+        if (!wanted) throw new PanelError('pass the screenshot path, as "path"', 422)
+        const absolute = resolve(String(wanted))
+        if (!isInside(shotsRoot, absolute)) {
+          throw new PanelError(
+            `${absolute} is not inside ${shotsRoot}; screenshots are only served from the report directory`,
+            403,
+          )
+        }
+        let bytes
+        try {
+          bytes = await readFile(absolute)
+        } catch (error) {
+          throw new PanelError(`cannot read ${absolute}: ${error.message}`, 404)
+        }
+        return { __raw: true, contentType: 'image/png', buffer: bytes }
+      },
+    },
     { method: 'GET', path: '/report', handler: async (_body, url) => {
       const wanted = url.searchParams.get('format') || 'markdown'
       const result = await readReport(url.searchParams.get('path'), { reportDir: config.reportDir, state })
@@ -900,6 +949,10 @@ export function createPanel({ ctx, config = {}, state }) {
       if (route.mutate) assertSameOrigin(request)
       const body = route.mutate && method !== 'GET' ? await readJsonBody(request) : {}
       const result = await route.handler(body, url)
+      // A handler may answer with bytes (`{ __raw: true }`) instead of a JSON
+      // document. Everything else in this API is JSON, so the exception is
+      // explicit rather than inferred from the response's shape.
+      if (result && result.__raw) return sendBytes(response, 200, result.buffer, result.contentType)
       return sendJson(response, 200, result)
     } catch (error) {
       const status =

@@ -12,6 +12,8 @@
  * process or a dirty fixture turns the next run into a mystery.
  */
 import crypto from 'node:crypto'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { IdeaClient } from './idea.js'
 import { buildVariables, interpolate, interpolateString } from './case.js'
 import { enforceGuard, redact } from './guard.js'
@@ -20,6 +22,7 @@ import { startService, stopService } from './service.js'
 import { sendRequest } from './http.js'
 import { connectDatabase, runSqlFile, runSqlText, runAssertionQuery } from './db.js'
 import { assertResponse, assertDatabase, assertLogs } from './assert.js'
+import { captureBrowser } from './browser.js'
 
 export class RunError extends Error {
   constructor(message, details = {}) {
@@ -62,6 +65,11 @@ export async function runCase(definition, options = {}) {
     capture: null,
     teardownHttp: null,
     probes: [],
+    // The browser journey's own evidence: screenshots on disk, console lines,
+    // and the page it was pointed at. Null when the case has no browser block,
+    // which is how the report tells "no UI to check" from "the UI was checked
+    // and said nothing".
+    browser: null,
   }
   const secrets = Object.values(resolved.databases)
     .map((item) => item.password)
@@ -365,6 +373,69 @@ export async function runCase(definition, options = {}) {
           response,
         ).map((check) => ({ ...check, label: `probe ${label}: ${check.label}` })),
       )
+    }
+
+    // 6c. The browser journey, if the case has one.
+    //
+    // It runs after the request and the probes on purpose: the page is being
+    // asked what a *user* would see once the service has done its work, and a
+    // screenshot taken before the request would show the state the setup put
+    // there rather than the state the run produced. Its checks join the same
+    // list as the HTTP ones — a run has one verdict, not one per layer.
+    if (definition.browser) {
+      // Screenshots go next to the reports, in a directory named after the run.
+      // A caller that does not say where (a one-off script, a probe) gets a temp
+      // directory, and the report still records the absolute path so the image
+      // is findable while it lasts.
+      const shotsDir = join(
+        options.artifactDir || join(tmpdir(), 'dsh-e2e-shots'),
+        runId,
+      )
+      try {
+        const journey = await captureBrowser({
+          url: definition.browser.url,
+          steps: definition.browser.steps,
+          viewport: definition.browser.viewport,
+          outDir: shotsDir,
+          timeoutMs: definition.browser.timeoutMs || undefined,
+          browserPath: definition.browser.browserPath || undefined,
+          insecureTls: definition.browser.insecureTls || target.insecureTls,
+          prefix: definition.browser.prefix,
+          baseUrl: target.baseUrl,
+        })
+        evidence.browser = {
+          url: journey.url,
+          browser: journey.browser,
+          viewport: journey.viewport,
+          screenshots: journey.screenshots.map((shot) => ({
+            name: shot.name,
+            file: shot.file,
+            fileName: shot.fileName,
+            at: shot.at,
+          })),
+          console: journey.console,
+        }
+        for (const entry of journey.timeline) steps.push(entry)
+        checks.push(...journey.checks)
+        step('browser.finished', {
+          screenshots: journey.screenshots.length,
+          consoleLines: journey.console.length,
+          failed: journey.checks.filter((check) => !check.ok).length,
+        })
+      } catch (error) {
+        // A browser that will not start is a failure of this case, not a reason
+        // to lose the HTTP verdict that was already established. The report says
+        // which layer broke.
+        evidence.browser = { url: definition.browser.url, error: error.message }
+        checks.push({
+          ok: false,
+          label: 'browser journey',
+          expected: 'the browser steps to run',
+          actual: error.message,
+          detail: '',
+        })
+        step('browser.failed', { error: error.message })
+      }
     }
 
     // 7. Database terminal state, per named database.

@@ -874,6 +874,37 @@ await testAsync('validate accepts a good case without writing it', async () => {
 
 // ---------------------------------------------------------------- plan
 
+test('a browser journey is a step of its own, not a footnote', () => {
+  // Six UI steps reported as "2 steps" would make the count worse than useless:
+  // the browser is where the time goes.
+  const definition = {
+    request: { method: 'GET', path: '/' },
+    expect: { response: { status: 200 } },
+    browser: { url: '/', steps: [{ screenshot: 'a' }, { click: '#go' }, { assertVisible: '#out' }] },
+  }
+  const steps = describeSteps(definition)
+  assert.deepEqual(steps.map((s) => s.kind), ['request', 'expect.response', 'browser'])
+  assert.equal(steps[2].label, '3 browser step(s)')
+
+  const justOpens = describeSteps({ request: { method: 'GET', path: '/' }, browser: { url: '/', steps: [] } })
+  assert.equal(justOpens[justOpens.length - 1].label, 'open the page')
+})
+
+test('a UI-only case is a test, not a plan', () => {
+  // Asserting on the page is asserting. Filing a UI case under "planned" is the
+  // label this tool reserves for a test that cannot fail.
+  const uiOnly = {
+    request: { method: 'GET', path: '/' },
+    expect: {},
+    browser: { url: '/', steps: [{ assertText: { selector: '#t', contains: 'hi' } }] },
+  }
+  assert.equal(hasAssertions(uiOnly), true, 'a browser assertion counts as an assertion')
+  assert.equal(caseStatus({ definition: uiOnly }, null), 'generated')
+
+  const browsing = { request: { method: 'GET', path: '/' }, expect: {}, browser: { url: '/', steps: [{ click: '#a' }] } }
+  assert.equal(hasAssertions(browsing), false, 'opening a page and clicking is still not an assertion')
+})
+
 section('plan')
 
 test('a skeleton with no assertions is a plan, not a test', () => {

@@ -283,6 +283,23 @@ const PAST_REPORT = {
     evidence: {
       request: { method: 'POST', url: 'http://localhost:8080/auth/register', body: { username: 'e2e1' } },
       response: { status: 200, statusText: 'OK', durationMs: 41, body: { token: 'abc' } },
+      // A case with a browser block also took pictures. The panel has to offer
+      // the tab for it, and the tab has to point at `/shot` rather than inline
+      // the bytes: a base64 PNG in the report makes every report bigger.
+      browser: {
+        url: 'http://localhost:8080/sign-in',
+        browser: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        viewport: { width: 1280, height: 800 },
+        screenshots: [
+          {
+            name: 'after click',
+            fileName: 'shot-01-after-click.png',
+            file: 'C:\\reports\\shots\\run-1\\shot-01-after-click.png',
+            at: 900,
+          },
+        ],
+        console: [{ level: 'log', text: 'greeted ada' }],
+      },
     },
   },
 }
@@ -646,6 +663,27 @@ await test('a passing case still shows what it saw', async () => {
   const after = textOf(detail)
   assert.match(after, /response\.status is 200/, 'the checks of that run')
   assert.match(after, /localhost:8080\/auth\/register/, 'the request it actually sent')
+})
+
+await test('a browser run shows its pictures, and they come from /shot', async () => {
+  const opened = await settle(() => mainComponent({}))
+  const shotsTab = elementsOf(opened).find(
+    (node) =>
+      node.props &&
+      String(node.props.className || '').split(' ').includes('e2e-mode-btn') &&
+      /Screenshots/.test(textOf(node)),
+  )
+  assert.ok(shotsTab, 'a case with a browser block offers the screenshot tab')
+  shotsTab.props.onClick()
+  const withShots = await settle(() => mainComponent({}))
+  const images = elementsOf(withShots).filter((node) => node.type === 'img')
+  assert.equal(images.length, 1, 'the screenshot is rendered')
+  const src = String(images[0].props.src)
+  // Served by the panel, not inlined: a case that never looks at a picture
+  // should not pay for one in every report it fetches.
+  assert.match(src, /\/shot\?path=/, 'the image is fetched from the shot route')
+  assert.match(src, /shot-01-after-click\.png/, 'and points at the file this run wrote')
+  assert.match(textOf(withShots), /greeted ada/, 'the page console is captured too')
 })
 
 await test('pressing Edit is what opens the editor', async () => {

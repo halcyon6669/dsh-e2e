@@ -173,6 +173,12 @@ window.__ModuleLoader__.load({
         'label.mode.checks': 'Checkpoints',
         'label.mode.logs': 'Console',
         'label.mode.database': 'Database',
+        'label.mode.shots': 'Screenshots',
+        'label.noShots': 'This run took no screenshots. A case only has them when it has a browser block.',
+        'label.shotOpen': 'Open full size',
+        'label.browserConsole': 'Page console',
+        'label.noBrowserConsole': 'The page logged nothing.',
+        'label.browserFailed': 'The browser journey did not run',
         'label.before': 'Before',
         'label.after': 'After',
         'label.changed': 'Changed',
@@ -377,6 +383,12 @@ window.__ModuleLoader__.load({
         'label.mode.checks': '检查点',
         'label.mode.logs': '控制台',
         'label.mode.database': '数据库',
+        'label.mode.shots': '截图',
+        'label.noShots': '这次运行没有截图。只有带 browser 块的用例才有。',
+        'label.shotOpen': '查看大图',
+        'label.browserConsole': '页面控制台',
+        'label.noBrowserConsole': '页面没有输出日志。',
+        'label.browserFailed': '浏览器步骤没有跑起来',
         'label.before': '执行前',
         'label.after': '执行后',
         'label.changed': '有变化',
@@ -1251,6 +1263,11 @@ window.__ModuleLoader__.load({
         { name: 'checks', label: t('label.mode.checks'), count: checks.length },
         { name: 'logs', label: t('label.mode.logs'), count: (evidence && evidence.logs && evidence.logs.lines && evidence.logs.lines.length) || 0 },
         { name: 'database', label: t('label.mode.database'), count: (evidence && evidence.snapshots && evidence.snapshots.length) || 0 },
+        // Only offered when the case has a browser block: a tab that is always
+        // there and always empty is a question the page cannot answer.
+        ...(evidence && evidence.browser
+          ? [{ name: 'shots', label: t('label.mode.shots'), count: (evidence.browser.screenshots || []).length }]
+          : []),
         { name: 'code', label: t('label.mode.code'), count: 0 },
         { name: 'history', label: t('label.mode.history'), count: (history || []).length },
       ]
@@ -1403,6 +1420,7 @@ window.__ModuleLoader__.load({
                 )
               : null,
             tab === 'code' ? h('pre', { className: 'e2e-pre is-plan' }, (selected && selected.yaml) || '') : null,
+            tab === 'shots' ? h(ShotsPane, { t, browser: evidence && evidence.browser }) : null,
             tab === 'history'
               ? h(HistoryPanel, { t, history, run: historyRun, onOpenRun, loading: historyLoading })
               : null,
@@ -1564,6 +1582,79 @@ window.__ModuleLoader__.load({
                 h('pre', { className: 'e2e-pre' }, rows(snapshot.after)),
               ),
             ),
+      )
+    }
+
+    /**
+     * The screenshots a browser journey took, plus the page's own console.
+     *
+     * The images are served by `/shot?path=…` rather than inlined as data URLs:
+     * a base64 PNG in the report JSON would triple the size of every report and
+     * make `GET /report` slow for the case that never looks at a picture.
+     *
+     * Clicking one opens it full size in a new tab. The alternative — a lightbox
+     * — is a modal this panel would then have to close on Escape, click-outside
+     * and unmount; a browser tab already does all three.
+     */
+    function ShotsPane(props) {
+      const { t, browser } = props
+      if (!browser) return h('div', { className: 'e2e-muted' }, t('label.noShots'))
+      if (browser.error) {
+        return h(
+          'div',
+          { className: 'e2e-detail-pane' },
+          h('div', { className: 'e2e-warning' }, `${t('label.browserFailed')}: ${browser.error}`),
+        )
+      }
+      const shots = browser.screenshots || []
+      const lines = browser.console || []
+      return h(
+        'div',
+        { className: 'e2e-detail-pane' },
+        shots.length > 0
+          ? h(
+              'div',
+              { className: 'e2e-shots' },
+              shots.map((shot, index) =>
+                h(
+                  'figure',
+                  { key: index, className: 'e2e-shot' },
+                  h(
+                    'a',
+                    {
+                      className: 'e2e-shot-link',
+                      href: `${API}/shot?path=${q(shot.file)}`,
+                      target: '_blank',
+                      rel: 'noreferrer',
+                      title: t('label.shotOpen'),
+                    },
+                    h('img', { className: 'e2e-shot-img', src: `${API}/shot?path=${q(shot.file)}`, alt: shot.name || '' }),
+                  ),
+                  h(
+                    'figcaption',
+                    { className: 'e2e-shot-name' },
+                    `${shot.name || ''} · +${shot.at} ms`,
+                  ),
+                ),
+              ),
+            )
+          : h('div', { className: 'e2e-muted' }, t('label.noShots')),
+        h(
+          'div',
+          { className: 'e2e-evidence-part' },
+          h('div', { className: 'e2e-evidence-head' }, t('label.browserConsole')),
+          lines.length > 0
+            ? h(
+                'pre',
+                { className: 'e2e-pre' },
+                formatBody(
+                  lines
+                    .map((line) => `${line.level}${line.url ? ` (${line.url})` : ''}: ${line.text}`)
+                    .join('\n'),
+                ),
+              )
+            : h('div', { className: 'e2e-muted' }, t('label.noBrowserConsole')),
+        ),
       )
     }
 
@@ -3181,6 +3272,13 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-db-pair { display: flex; gap: 8px; flex-wrap: wrap; }
 .e2e-db-pair > div { flex: 1 1 260px; min-width: 0; }
 .e2e-db-pair .e2e-pre { margin-top: 2px; max-height: 240px; overflow: auto; }
+/* Screenshots are the one thing here whose aspect ratio is not ours to choose,
+   so the grid gives each one a column and the image fits inside it. */
+.e2e-shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.e2e-shot { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.e2e-shot-link { display: block; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow: hidden; }
+.e2e-shot-img { display: block; width: 100%; height: auto; }
+.e2e-shot-name { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
 .e2e-output {
   display: flex;
   flex-direction: column;

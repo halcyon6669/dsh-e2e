@@ -33,6 +33,7 @@ const SUPPORTED_KEYS = new Set([
   'setup',
   'request',
   'expect',
+  'browser',
   'teardown',
 ])
 
@@ -133,6 +134,7 @@ export async function normalizeCase(raw, caseDir, source) {
   const teardown = await normalizeTeardown(raw.teardown, caseDir, source)
   const request = normalizeRequest(raw.request, source)
   const expect = normalizeExpect(raw.expect, source)
+  const browser = normalizeBrowser(raw.browser, source)
 
   const endpoint = normalizeEndpoint(raw.endpoint, request, source)
   const id = String(raw.id)
@@ -190,6 +192,7 @@ export async function normalizeCase(raw, caseDir, source) {
     setup,
     request,
     expect,
+    browser,
     teardown,
     source,
     dir: caseDir,
@@ -538,6 +541,146 @@ function normalizeProbes(list, label) {
       timeoutMs: Number(entry.timeoutMs || 30000),
     }
   })
+}
+
+/**
+ * The `browser` block: a user journey, checked the way a user would notice it.
+ *
+ * A backend case proves what the service *answered*. That is a different question
+ * from "what did the page show": a 200 with an empty table passes every HTTP
+ * assertion in this tool and is still a bug. The block exists so a case can walk
+ * the page — fill a field, click a button, assert the text — and come back with a
+ * screenshot as evidence.
+ *
+ * Steps are a small fixed vocabulary rather than free-form script: a test that
+ * can run arbitrary JavaScript is a test whose failure you cannot interpret.
+ */
+function normalizeBrowser(browser, source) {
+  if (!browser) return null
+  if (typeof browser !== 'object' || Array.isArray(browser)) {
+    throw new CaseError(`${source}: browser must be a mapping with a url and steps`)
+  }
+  const unknown = Object.keys(browser).filter(
+    (key) => !['url', 'steps', 'viewport', 'timeoutMs', 'browserPath', 'insecureTls', 'prefix'].includes(key),
+  )
+  if (unknown.length > 0) {
+    throw new CaseError(
+      `${source}: unknown browser field(s) ${unknown.join(', ')}; allowed: url, steps, viewport, timeoutMs, browserPath, insecureTls, prefix`,
+    )
+  }
+  if (!browser.url) throw new CaseError(`${source}: browser needs a "url" (an absolute URL or a path under env.baseUrl)`)
+  if (typeof browser.url !== 'string') {
+    // `url: 1` is truthy and would otherwise arrive at the browser as "1" — a
+    // path that resolves to nothing and fails at navigate time, far from here.
+    throw new CaseError(`${source}: browser.url must be a string, not ${JSON.stringify(browser.url)}`)
+  }
+
+  const viewport = browser.viewport
+    ? { width: Number(browser.viewport.width), height: Number(browser.viewport.height) }
+    : { width: 1280, height: 800 }
+  for (const [key, value] of Object.entries(viewport)) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new CaseError(`${source}: browser.viewport.${key} must be a positive number, not ${JSON.stringify(browser.viewport[key])}`)
+    }
+  }
+
+  const rawSteps = browser.steps === undefined ? [] : browser.steps
+  if (!Array.isArray(rawSteps)) throw new CaseError(`${source}: browser.steps must be a list`)
+
+  const steps = rawSteps.map((entry, index) => {
+    const at = `${source}: browser.steps[${index}]`
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new CaseError(`${at} must be a mapping with exactly one step key`)
+    }
+    const keys = Object.keys(entry)
+    if (keys.length !== 1) {
+      throw new CaseError(
+        `${at} has ${keys.length} keys (${keys.join(', ')}); each step is one action so the report can name it`,
+      )
+    }
+    const kind = keys[0]
+    const value = entry[kind]
+    switch (kind) {
+      case 'screenshot':
+        return { screenshot: String(value) }
+      case 'click':
+        return requiresSelector(at, kind, value) ? { click: String(value) } : null
+      case 'fill': {
+        if (!value || typeof value !== 'object') throw new CaseError(`${at}.fill must be a mapping with selector and value`)
+        if (!value.selector) throw new CaseError(`${at}.fill needs a "selector"`)
+        if (value.value === undefined) throw new CaseError(`${at}.fill needs a "value" (use "" to clear a field)`)
+        return { fill: { selector: String(value.selector), value: String(value.value) }, settleMs: settle(value.settleMs) }
+      }
+      case 'press': {
+        if (!value || typeof value !== 'object') throw new CaseError(`${at}.press must be a mapping with selector and key`)
+        if (!value.selector) throw new CaseError(`${at}.press needs a "selector"`)
+        return { press: { selector: String(value.selector), key: String(value.key || 'Enter') }, settleMs: settle(value.settleMs) }
+      }
+      case 'wait':
+        if (!Number.isFinite(Number(value))) throw new CaseError(`${at}.wait must be a number of milliseconds`)
+        return { wait: Number(value) }
+      case 'waitFor': {
+        if (typeof value === 'string') return { waitFor: value }
+        if (!value || typeof value !== 'object' || !value.selector) {
+          throw new CaseError(`${at}.waitFor must be a selector, or a mapping with "selector" and optional "timeoutMs"`)
+        }
+        return { waitFor: String(value.selector), timeoutMs: value.timeoutMs === undefined ? undefined : Number(value.timeoutMs) }
+      }
+      case 'assertText': {
+        if (!value || typeof value !== 'object' || !value.selector) {
+          throw new CaseError(`${at}.assertText needs a "selector"`)
+        }
+        if (value.contains === undefined) {
+          throw new CaseError(`${at}.assertText needs "contains" — an assertion that does not say what it expects cannot fail`)
+        }
+        return {
+          assertText: { selector: String(value.selector), contains: String(value.contains), description: value.description ? String(value.description) : '' },
+        }
+      }
+      // `assertVisible: '#id'` and `assertVisible: { selector, description }`.
+      case 'assertVisible':
+        if (typeof value === 'string') return { assertVisible: value }
+        if (!value || typeof value !== 'object' || !value.selector) {
+          throw new CaseError(`${at}.assertVisible must be a selector, or a mapping with "selector"`)
+        }
+        return { assertVisible: String(value.selector), description: value.description ? String(value.description) : '' }
+      default:
+        throw new CaseError(
+          `${at} is "${kind}", which is not a browser step; allowed: screenshot, click, fill, press, wait, waitFor, assertText, assertVisible`,
+        )
+    }
+  })
+  if (steps.some((step) => step === null)) {
+    throw new CaseError(`${source}: browser.steps could not be normalised`)
+  }
+
+  return {
+    url: String(browser.url),
+    steps,
+    viewport,
+    // Left null so the resolver's default applies; the browser block is often
+    // written before anyone knows how slow the page is.
+    timeoutMs: browser.timeoutMs === undefined ? null : Number(browser.timeoutMs),
+    browserPath: browser.browserPath ? String(browser.browserPath) : null,
+    insecureTls: browser.insecureTls === true,
+    prefix: browser.prefix ? String(browser.prefix) : 'shot',
+  }
+}
+
+/** `settleMs` is a knob, not a contract: absent means "the default pause". */
+function settle(value) {
+  if (value === undefined) return undefined
+  const number = Number(value)
+  if (!Number.isFinite(number) || number < 0) {
+    throw new CaseError(`settleMs must be a non-negative number of milliseconds, not ${JSON.stringify(value)}`)
+  }
+  return number
+}
+
+/** Every step that takes a selector has to say which one. */
+function requiresSelector(at, kind, value) {
+  if (!value) throw new CaseError(`${at}.${kind} needs a CSS selector`)
+  return true
 }
 
 function normalizeExpect(expect, source) {

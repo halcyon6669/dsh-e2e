@@ -107,7 +107,39 @@ export async function checkTargets(definition, resolved, options = {}) {
     problems.push(`the IDE MCP port ${idePort} is not a valid TCP port`)
   }
 
+  // A browser block navigates somewhere. If it is an absolute URL it bypasses
+  // `baseUrl` entirely, so it has to be checked with the same rules — otherwise
+  // "the page under test" is an unguarded hole in a guard whose whole job is to
+  // keep the tool off production.
+  const browserUrl = definition.browser ? absoluteBrowserUrl(definition) : null
+  if (browserUrl) {
+    const browserHost = hostOf(browserUrl)
+    if (!browserHost) {
+      problems.push(`the browser block points at ${browserUrl}, which is not a URL`)
+    } else if (!allowRemote && !ALLOWED_HOST_PATTERNS.some((pattern) => pattern.test(browserHost))) {
+      problems.push(
+        `the browser block points at ${browserHost}, which is not loopback or a private address (pass allowRemote to override)`,
+      )
+    }
+    if (looksLikeProduction(browserUrl)) {
+      problems.push(`the browser block looks like a production page: ${browserUrl}`)
+    }
+  }
+
   return problems
+}
+
+/**
+ * The URL the browser would actually open, or null when it is relative.
+ *
+ * A relative path is resolved against `baseUrl`, which is already being checked
+ * above; resolving it here would mean re-implementing `joinUrl` and getting one
+ * of the two slashes wrong.
+ */
+function absoluteBrowserUrl(definition) {
+  const url = definition.browser && definition.browser.url
+  if (!url || !/^[a-z][a-z0-9+.-]*:\/\//i.test(String(url))) return null
+  return String(url)
 }
 
 /** Fails the run when the guard found anything; returns the accepted options. */

@@ -1,6 +1,6 @@
 {
   "name": "dsh-e2e",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "DSH plugin: run a real end-to-end case against a real service - start it through its IDE run configuration, send the real request, collect the log lines for its trace id, read the database terminal state, and hand back a report with the evidence.",
   "keywords": [
     "dsh",
@@ -39,7 +39,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node dev/unit.test.mjs && node dev/reload.test.mjs && node dev/client.test.mjs && node dev/resolve.test.mjs && node dev/registry.test.mjs && node dev/scan.test.mjs && node dev/scaffold.test.mjs && node dev/projects.test.mjs && node dev/render.test.mjs && node dev/edit.test.mjs && node dev/scope.test.mjs",
+    "test": "node dev/unit.test.mjs && node dev/reload.test.mjs && node dev/client.test.mjs && node dev/resolve.test.mjs && node dev/registry.test.mjs && node dev/scan.test.mjs && node dev/scaffold.test.mjs && node dev/projects.test.mjs && node dev/render.test.mjs && node dev/edit.test.mjs && node dev/scope.test.mjs && node dev/browser.test.mjs",
     "test:unit": "node dev/unit.test.mjs",
     "test:reload": "node dev/reload.test.mjs",
     "test:client": "node dev/client.test.mjs",
@@ -52,7 +52,8 @@
     "test:projects": "node dev/projects.test.mjs",
     "test:render": "node dev/render.test.mjs",
     "test:edit": "node dev/edit.test.mjs",
-    "test:scope": "node dev/scope.test.mjs"
+    "test:scope": "node dev/scope.test.mjs",
+    "test:browser": "node dev/browser.test.mjs"
   },
   "dsh": {
     "bundle": {

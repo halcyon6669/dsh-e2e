@@ -217,6 +217,46 @@ export function renderMarkdown(report) {
     }
   }
 
+  if (report.evidence && report.evidence.browser) {
+    const browser = report.evidence.browser
+    lines.push('')
+    lines.push('## Browser')
+    lines.push('')
+    if (browser.error) {
+      lines.push(`The browser journey did not run: ${browser.error}`)
+      lines.push('')
+    } else {
+      lines.push(`- url: ${browser.url}`)
+      if (browser.browser) lines.push(`- browser: \`${browser.browser}\``)
+      if (browser.viewport) lines.push(`- viewport: ${browser.viewport.width}×${browser.viewport.height}`)
+      lines.push('')
+      if (Array.isArray(browser.screenshots) && browser.screenshots.length > 0) {
+        for (const shot of browser.screenshots) {
+          // The absolute path, because a report is read on the machine that ran
+          // it: a relative link would resolve against wherever it was copied to.
+          lines.push(`![${shot.name || shot.fileName}](<${shot.file}>)`)
+          lines.push('')
+          lines.push(`_${shot.name || shot.fileName}_`)
+          lines.push('')
+        }
+      } else {
+        lines.push('_no screenshots_')
+        lines.push('')
+      }
+      const consoleLines = Array.isArray(browser.console) ? browser.console : []
+      if (consoleLines.length > 0) {
+        lines.push('### Page console')
+        lines.push('')
+        lines.push('```')
+        for (const line of consoleLines.slice(0, 200)) {
+          lines.push(`${line.level}${line.url ? ` (${line.url})` : ''}: ${line.text}`)
+        }
+        lines.push('```')
+        lines.push('')
+      }
+    }
+  }
+
   if (report.teardown) {
     lines.push('')
     lines.push('## Teardown')

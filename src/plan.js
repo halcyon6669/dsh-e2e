@@ -66,6 +66,17 @@ export function describeSteps(definition) {
   }
   if (expect.logs) steps.push({ kind: 'expect.logs', label: 'read the logs' })
 
+  // The browser journey is a step, not a footnote: it starts a real browser,
+  // navigates, and can take a dozen actions. A case with six UI steps that
+  // reports "2 steps" would make the count worse than useless.
+  if (definition.browser) {
+    const count = (definition.browser.steps || []).length
+    steps.push({
+      kind: 'browser',
+      label: count > 0 ? `${count} browser step(s)` : 'open the page',
+    })
+  }
+
   for (const request of teardown.http || []) {
     steps.push({ kind: 'teardown.http', label: `${request.method} ${request.path || request.url}` })
   }
@@ -84,11 +95,17 @@ export function describeSteps(definition) {
  */
 export function hasAssertions(definition) {
   const expect = definition.expect || {}
+  // A browser step can assert too, and a UI-only case is a real test: it says
+  // what the page has to show. Counting only `expect` would file it under
+  // "planned" — the label this tool reserves for a test that cannot fail.
+  const browserSteps = (definition.browser && definition.browser.steps) || []
+  const assertsInBrowser = browserSteps.some((step) => step.assertText || step.assertVisible)
   return Boolean(
     expect.response ||
       (expect.database || []).length > 0 ||
       (expect.calls || []).length > 0 ||
-      expect.logs,
+      expect.logs ||
+      assertsInBrowser,
   )
 }
 

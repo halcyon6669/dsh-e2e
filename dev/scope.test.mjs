@@ -81,6 +81,8 @@ const GLOBALS = new Set([
   'sessionStorage', 'location', 'history', 'navigator', 'performance', 'crypto',
   'MutationObserver', 'ResizeObserver', 'IntersectionObserver', 'CustomEvent',
   'Event', 'Element', 'Node', 'HTMLElement',
+  // Node 22+ makes WebSocket a global; the browser layer talks CDP over it.
+  'WebSocket', 'WebSocketStream', 'KeyboardEvent', 'EventTarget',
 ])
 
 /**

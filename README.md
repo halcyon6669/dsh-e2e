@@ -168,6 +168,36 @@ case ids have to be unique so a report can name one case
 
 完整 DSL 见 [`docs/design.md`](docs/design.md)。
 
+### 前端页面也要测
+
+HTTP 断言回答不了「用户看到了什么」。给用例加一个 `browser` 块，它就会起一个真浏览器（本机 Chrome 或 Edge，无头模式），按步骤走一遍并拍照：
+
+```yaml
+browser:
+  url: /sign-in
+  viewport: { width: 1000, height: 700 }
+  steps:
+    - screenshot: loaded
+    - fill: { selector: '#user', value: ada }
+    - click: '#go'
+    - assertText: { selector: '#out', contains: welcome ada, description: 页面问候了用户 }
+    - screenshot: after click
+```
+
+三步规矩：
+
+- **一步一件事**。每一步恰好一个 key（`screenshot` / `click` / `fill` / `press` / `wait` / `waitFor` / `assertText` / `assertVisible`）。两个 key 会被拒——报告里每一行要能对应读者做的一件事。
+- **断言必须说清期望**。`assertText` 不带 `contains` 会被拒：一个不说自己期望什么的断言永远不会失败，它占用了「已检查」这个位置。
+- **它跑在请求之后**。页面被问的是「服务干完活之后用户看到什么」；截图拍在请求前只会拍到 setup 留下的状态。
+
+浏览器断言和 HTTP 断言进同一个清单、同一个 verdict。浏览器起不来是这个用例的失败，但它不会抹掉已经建立的 HTTP 结论——报告会同时说清哪一层坏了。
+
+**为什么是截图而不是视频**：本机没有 ffmpeg，编码 mp4 要么引入一个几百 MB 的依赖，要么自己写编码器。所以这里是**帧序列**（`shot-01-loaded.png`、`shot-02-after-click.png`），按步骤顺序编号、在面板里按顺序展示。它不叫视频，文档里也不叫。
+
+截图落在 `<报告目录>/shots/<runId>/`，报告里记绝对路径，面板通过 `GET /shot?path=` 取图（只服务这个目录内的文件，越界 403）。不内联成 base64：那会让每份报告大三分之一，而多数时候没人看图。
+
+页面的控制台（`console.log`、未捕获异常、资源 404）一并收进报告——**但那不是网络瀑布**，看不见「这次请求花了 380ms」。性能不是这个工具的判定对象，这条写在已知限制里，而不是标一个「已支持」。
+
 ## 面板
 
 侧栏「端到端测试」，第一屏是**项目表**：
@@ -203,6 +233,7 @@ case ids have to be unique so a report can name one case
 | 数据库页签 | 每条数据库断言**执行前**与**执行后**的查询结果并排显示，外加「有变化 / 无变化」 |
 | 代码页签 | 整份 YAML 原文，只读 |
 | 历史页签 | 这个用例在磁盘上的每一次运行，新的在前：结论 + 相对时间 + 断言数 + 耗时 |
+| 截图页签 | 有 `browser` 块时才有：每次截图一张缩略图，点开看大图；下面是页面控制台 |
 | 输出区 | 状态码、响应体、以及本次运行的时间线（每步的 `+N ms`） |
 
 点开一条通过的用例以前是空的——不是因为它无话可说，而是面板只显示「本次会话刚跑过的那一次」。现在打开用例就直接加载磁盘上最新那份报告，页签里的内容全都来自它；历史和实时运行**共用同一个渲染器**（`Evidence`），因为过去的那次运行和刚才那次是同一个对象、同一个形状；两个渲染器一定会漂移，而漂移的那个永远是你没在看的那个。
@@ -321,6 +352,7 @@ dump 语法上无损，信息上有损：注释、空行、引号风格、字段
 4. **配置错误必须响亮**。拼错字段名报错，不静默忽略跑出假通过。
 5. **用例里不许有凭据**。名字进用例，连接进 registry；护栏校验的是**解析之后**真正会被拨号的那个地址——只看 YAML 等于什么都没看。
 6. **缺口要写出来**。见 [`docs/design.md`](docs/design.md) §11。
+7. **做不到的事情，说做不到，不要换个名字假装做到了。** 没有 ffmpeg，所以是帧序列不是视频；只收了页面 console，所以那一页叫控制台不叫网络；WireMock 只解析，所以它躺在已知限制第一条里而不是标一个「已支持」。代价是清单变长，收益是清单上剩下的每一条都可以信。
 
 ## 已知限制
 
@@ -330,13 +362,17 @@ dump 语法上无损，信息上有损：注释、空行、引号风格、字段
 - **用例不能并行**：端口和数据库 fixture 会冲突。
 - **AI 生成需要一个选中的模型**。没选时按钮会告诉你原因，编辑器与运行按钮照常可用。
 - **扫描器只认 Spring MVC 注解**。换框架时 `e2e_scan_endpoints` 会返回 0 条并给出 `warnings`，不会猜。它也不做跨文件类型展开（`private AddressDto address` 只得到字段名）。
+- **浏览器层只收页面 console，没有网络瀑布**。看得见 `Failed to load resource: 404`，看不见「这次请求花了 380ms」——性能不是这个工具的判定对象。
+- **没有视频，只有帧序列**。本机没有 ffmpeg，编码 mp4 得背一个几百 MB 的依赖，换来的只是把一串 PNG 打包成一个文件。
+- **浏览器层只认 Chrome/Edge**。找得到就无头跑，找不到时报错并让你设 `env.browserPath`（或 `DSH_CHROME`），不会静默跳过——静默跳过会把「页面一片空白」变成一条通过。
 
 ## 开发
 
 ```powershell
 cd C:\Users\administor-\Documents\deepseek-harness\default-workspace\dsh-e2e
 
-# 全部十一个套件（都不需要 IDE；registry 那套会读本机的 dsh-db-mcp 数据源）
+# 全部十二个套件（都不需要 IDE；registry 那套会读本机的 dsh-db-mcp 数据源，
+# browser 那套会用本机 Chrome/Edge 真跑页面，没装浏览器时明确跳过）
 npm test
 
 # 探针（需要真环境）
@@ -375,6 +411,10 @@ assert.equal(icon.props.width, 20)
 
 它第一版是「这个名字在这个文件里任何地方声明过吗」，那版抓不到第二个同类 bug：`src/runner.js` 里有两个循环，一个写 `for (const [index, expectation] of ...)`、另一个写 `for (const expectation of ...)`，后者读 `index` 而自己没声明。`node --check` 通过、单测全绿，只有真的对着服务跑一次才炸出 `fatal: ReferenceError: index is not defined`。扁平版之所以漏掉它，是因为 `index` 在别处（另一个函数里）确实声明过——**一个只抓得到你已经修完的 bug 的检查，是装饰**。所以现在是按作用域解析的，并且它自己带两条反向测试：兄弟作用域的声明必须不可见，闭包里的必须可见。没有 parser 的机器上它打印一行说明然后跳过——一个在缺依赖时失败的探针，只会教会人忽略它。
 
+`dev/browser.test.mjs` 分两半。前半是不需要浏览器的形状测试（一步一动作、断言必须带期望、未知步骤要列出已知项、`url` 必须是字符串、viewport 必须为正、浏览器块也要过护栏），每次 `npm test` 都跑。后半是**真 Chrome 旅程**：起一个真浏览器、打开临时 HTML、填值、点击、断言、截图，然后检查 PNG 真的有超过 1KB 的字节、时间线里没有任何条目叫 `shot-01-...`（时间线的名字应该是步骤种类，不是截图的文件名——这曾是一个真 bug）。
+
+两半分开的原因写在文件头：形状测试便宜、可以常跑；旅程测试要起一个真进程，没有浏览器的机器上它打印一行原因然后跳过。**一个在没有浏览器的机器上失败的探针，只会教会人忽略探针。**
+
 改完代码后热重载：
 
 ```powershell
@@ -403,8 +443,9 @@ src/tools.js          7 个工具注册
 src/case.js           YAML 解析与规范化
 src/registry.js       target / 数据库注册表 + dsh-db-mcp 导入
 src/resolve.js        用例 + registry → 实际连接
-src/guard.js          环境护栏（默认拒绝，校验解析后的地址）
+src/guard.js          环境护栏（默认拒绝，校验解析后的地址，含 browser.url）
 src/runner.js         流水线编排
+src/browser.js        CDP 客户端：起 Chrome、按步骤操作、截图（零依赖，自己讲 WebSocket）
 src/service.js        启停服务 + 日志跟随
 src/idea.js           IDEA MCP 客户端（SSE + JSON-RPC）
 src/http.js           HTTP 客户端（node:http，保留原始字节）
