@@ -530,8 +530,14 @@ await test('the landing page offers to create a project, and the form appears in
   const inputs = elementsOf(opened).filter(
     (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'),
   )
-  assert.ok(inputs.length >= 4, `expected the name, the URL, the path and the configuration fields, found ${inputs.length}`)
-  assert.match(textOf(opened), /Remote host/, 'the allowRemote checkbox is labelled')
+  // The form asks for a name and a path only: the Base URL is read from the
+  // project's application.yml, and the run configuration / remote-host fields
+  // were removed — local e2e runs need neither.
+  assert.ok(inputs.length >= 2, `expected the name and the project path fields, found ${inputs.length}`)
+  assert.equal(inputs.length, 2, `expected exactly the name and the project path fields, found ${inputs.length}`)
+  // A placeholder is a prop, not text content: assert on it where it lives.
+  const pathField = inputs.find((node) => /Project path \(required/.test(String(node.props.placeholder || '')))
+  assert.ok(pathField, 'the path field says the Base URL is derived')
   const submit = elementsOf(opened).find(
     (node) =>
       node.props &&
@@ -539,6 +545,19 @@ await test('the landing page offers to create a project, and the form appears in
       textOf(node).trim() === 'Create',
   )
   assert.ok(submit, 'the form has its own create button')
+})
+
+await test('each project card offers to delete the project, with a two-press confirm', async () => {
+  const cards = elementsOf(landing).filter((node) => node.props && String(node.props.className || '').split(' ').includes('e2e-project-card'))
+  assert.ok(cards.length > 0, 'the landing page shows project cards')
+  const deleteButtons = elementsOf(landing).filter(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-project-delete'),
+  )
+  assert.equal(deleteButtons.length, cards.length, 'every project card carries its own delete control')
+  // First press arms it; the button then says what the second press will do.
+  deleteButtons[0].props.onClick({ stopPropagation() {} })
+  const armed = await settle(() => mainComponent({}))
+  assert.match(textOf(armed), /Delete for real/, 'the armed delete says what the second press does')
 })
 
 await test('results render as counts, not one summary word', () => {

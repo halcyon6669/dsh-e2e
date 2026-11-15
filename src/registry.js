@@ -500,3 +500,81 @@ export async function addTarget(input = {}) {
   }
   return { name, baseUrl, file, created: fresh }
 }
+
+/**
+ * Removes one target: the write side of "delete project".
+ *
+ * Like addTarget this is a *text* edit, not a parse-and-rewrite — the registry
+ * is a file people keep comments in, and a round-trip through the YAML dumper
+ * would throw every one of those away. The whole mapping is removed: the
+ * `name:` line plus every more-indented line under it, so any field the target
+ * carries (baseUrl, projectPath, caseDir, …) goes with it. A comment directly
+ * above the entry is treated as the entry's own annotation and removed too;
+ * comments anywhere else survive untouched.
+ *
+ * Returns the file edited so the caller can say what changed. Refuses targets
+ * that exist only in the plugin config — nothing here edits that file.
+ */
+export async function removeTarget(input = {}) {
+  const { config = {}, caseDir } = input
+  const name = String(input.name || '').trim()
+  if (!name) throw new RegistryError('a target name is needed to remove it')
+
+  // The same candidates loadRegistry reads, in the same order — see addTarget.
+  let file = null
+  let text = ''
+  for (const candidate of registryCandidates({ config, caseDir })) {
+    try {
+      text = await readFile(candidate, 'utf8')
+      file = candidate
+      break
+    } catch (error) {
+      if (error && error.code === 'ENOENT') continue
+      throw new RegistryError(`cannot read registry file ${candidate}: ${error.message}`)
+    }
+  }
+  if (!file) {
+    throw new RegistryError(`no registry file was found to remove "${name}" from`, { name })
+  }
+
+  const lines = text.split('\n')
+  const start = lines.findIndex((line) => new RegExp(`^[ \\t]{2}${escapeRegExp(name)}[ \\t]*:`).test(line))
+  if (start < 0) {
+    throw new RegistryError(
+      `target "${name}" is not in ${file}; if it lives in the plugin config, remove it from the profile instead`,
+      { name, file },
+    )
+  }
+
+  // The mapping extends to the last line more indented than the name. Blank
+  // lines and comments after it belong to the *next* entry, so they stay.
+  let end = start + 1
+  while (end < lines.length) {
+    const line = lines[end]
+    if (line.trim() === '' || /^\s*#/.test(line)) break
+    if (new RegExp(`^[ \\t]{3,}`).test(line)) { end += 1; continue }
+    break
+  }
+  // A comment (or several) sitting directly above the name is the entry's own
+  // description; it is meaningless once the entry is gone.
+  let head = start
+  while (head > 0 && /^\s*#/.test(lines[head - 1])) head -= 1
+
+  lines.splice(head, end - head)
+  let updated = lines.join('\n')
+  updated = updated.replace(/\n{3,}/g, '\n\n')
+
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
+  try {
+    await writeFile(tmp, updated, 'utf8')
+    await rename(tmp, file)
+  } catch (error) {
+    try { await unlink(tmp) } catch { /* nothing to clean */ }
+    throw new RegistryError(`cannot write ${file}: ${error.message}`)
+  }
+  return { name, file }
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}

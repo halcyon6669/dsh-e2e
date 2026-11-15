@@ -14,7 +14,7 @@
  *   3. The API answers the same shapes the tools do, so the panel and the agent
  *      never disagree about what a run produced.
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadCaseFile, CaseError, withCaseId } from './case.js'
@@ -22,7 +22,7 @@ import { runCase, redactReport } from './runner.js'
 import { renderSummary } from './report.js'
 import { auditBaseUrl, checkTargets } from './guard.js'
 import { resolveEnvironment, describeEnvironment } from './resolve.js'
-import { loadRegistry, describeDatabase, knownNames, resolveTarget, addTarget, RegistryError } from './registry.js'
+import { loadRegistry, describeDatabase, knownNames, resolveTarget, addTarget, removeTarget, RegistryError } from './registry.js'
 import { generateCase, explainFailure, GenerateError } from './ai.js'
 import { listProjects } from './projects.js'
 import { describeSteps, hasAssertions } from './plan.js'
@@ -704,12 +704,41 @@ export function createPanel({ ctx, config = {}, state }) {
    * not a row in a database — it is the thing a case names in `env.target`,
    * and the directory its YAML lives in — so creating it means writing the
    * registry (text insertion, comments preserved) and making the directory.
-   * The same base-URL rules a run applies are applied here, so a project that
-   * would fail every case cannot be born.
+   *
+   * The Base URL is not asked for: a local Spring project declares its port and
+   * context path itself, so it is read from `src/main/resources/application.*`
+   * via `guessBaseUrl`. An explicitly passed baseUrl still wins — the tools and
+   * tests use that door — and the same base-URL rules a run applies are applied
+   * to whatever ends up in the registry, so a project that would fail every
+   * case cannot be born.
    */
   async function createProject(input = {}) {
     const name = String(input.name || '').trim()
-    const baseUrl = String(input.baseUrl || '').trim()
+    const projectPath = String(input.projectPath || '').trim()
+    let baseUrl = String(input.baseUrl || '').trim()
+    let derived = null
+    if (!baseUrl) {
+      if (!projectPath) {
+        throw new PanelError(
+          'a project needs a project path — the Base URL is read from the project\'s application configuration, so there is nothing to derive it from without one',
+          422,
+        )
+      }
+      const { guessBaseUrl } = await import('./scan.js')
+      try {
+        derived = await guessBaseUrl(projectPath)
+      } catch (error) {
+        throw new PanelError(`cannot read the project's server configuration: ${error.message}`, 422, { projectPath })
+      }
+      baseUrl = derived.baseUrl || ''
+      if (!baseUrl) {
+        throw new PanelError(
+          `could not derive a Base URL from ${projectPath}: ${(derived.warnings || []).join('; ') || 'no server.port found'}`,
+          422,
+          { projectPath, warnings: derived.warnings },
+        )
+      }
+    }
     const problems = auditBaseUrl(baseUrl, { allowRemote: input.allowRemote === true })
     if (problems.length > 0) throw new PanelError(`the project was refused: ${problems.join('; ')}`, 422, { problems })
     const root = roots()[0] || defaultCaseDir({ state })
@@ -740,7 +769,62 @@ export function createPanel({ ctx, config = {}, state }) {
       caseDir: root,
     })
     state.lastCaseDir = root
-    return { ok: true, name: slug, baseUrl, registryFile: written.file, caseDir, created: written.created }
+    return {
+      ok: true,
+      name: slug,
+      baseUrl,
+      derivedFrom: derived ? derived.source : null,
+      registryFile: written.file,
+      caseDir,
+      created: written.created,
+    }
+  }
+
+  /**
+   * Delete a project: the registry target and the case directory it owned.
+   *
+   * This is the destructive half of "create project", so it is narrow on
+   * purpose. The target is removed from the registry text (comments kept); the
+   * case directory is removed only when it is the one the target names
+   * (`caseDir` in the registry) or the slug-named directory under the panel's
+   * case root — an unrelated directory that merely looks similar is never
+   * touched. Reports are left alone: they are the run history of tests that
+   * actually ran, and deleting a project should not rewrite history.
+   */
+  async function deleteProject(input = {}) {
+    const name = String(input.name || '').trim()
+    if (!name) throw new PanelError('a project name is needed to delete it', 422)
+    const root = roots()[0] || defaultCaseDir({ state })
+    const registry = await loadRegistry({ config, caseDir: root, env: process.env })
+    if (!registry.targets || !registry.targets[name]) {
+      throw new PanelError(`unknown project "${name}" — the registry does not define it`, 422, { name })
+    }
+    const target = await resolveTarget(registry, name, {})
+    const removed = await removeTarget({ name, config, caseDir: root })
+
+    // The directory that holds this project's cases: what the registry says,
+    // falling back to the slug directory this panel's createProject makes.
+    let caseDir = target.caseDir ? resolve(target.caseDir) : null
+    if (!caseDir) {
+      const candidate = resolve(join(root, name))
+      if (candidate.toLowerCase() !== resolve(root).toLowerCase()) caseDir = candidate
+    }
+    let removedDir = null
+    if (caseDir) {
+      try {
+        const entries = await readdir(caseDir)
+        const hasCases = entries.some((entry) => entry.endsWith('.yml') || entry.endsWith('.yaml'))
+        if (!hasCases || input.force === true) {
+          await rm(caseDir, { recursive: true, force: true })
+          removedDir = caseDir
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          throw new PanelError(`the target was removed from ${removed.file}, but the case directory ${caseDir} could not be deleted: ${error.message}`, 500)
+        }
+      }
+    }
+    return { ok: true, name, registryFile: removed.file, removedDir, keptDir: caseDir && !removedDir ? caseDir : null }
   }
 
   async function generate(input = {}) {
@@ -819,6 +903,7 @@ export function createPanel({ ctx, config = {}, state }) {
     { method: 'GET', path: '/reports', handler: async () => listReports({ config, state }) },
     { method: 'GET', path: '/projects', handler: async () => listProjects({ config, state, env: process.env }) },
     { method: 'POST', path: '/project', mutate: true, handler: async (body) => createProject(body) },
+    { method: 'DELETE', path: '/project', mutate: true, handler: async (_body, url) => deleteProject({ name: url.searchParams.get('name') }) },
     {
       method: 'GET',
       path: '/shot',
@@ -1031,6 +1116,7 @@ export function createPanel({ ctx, config = {}, state }) {
     startBatch,
     batchStatus,
     createProject,
+    deleteProject,
     dispose() {
       runs.clear()
       batches.clear()

@@ -1,7 +1,7 @@
 /**
- * dsh-e2e — reads a Java/Spring project and lists the endpoints it exposes.
+ * dsh-e2e 鈥?reads a Java/Spring project and lists the endpoints it exposes.
  *
- * This exists because the hard part of writing a case is not the YAML syntax — the
+ * This exists because the hard part of writing a case is not the YAML syntax 鈥?the
  * validator already reports the line and column of a bad indent. The hard part is
  * knowing what to send and what to assert. A project that already declares
  *
@@ -250,7 +250,7 @@ function readDtoClass(source, className) {
  *
  * Values use the case DSL's generators (`${random.hex}`) where uniqueness matters,
  * because a fixed username makes the second run of a register case fail on a
- * duplicate key — and a case that only passes once is worse than no case.
+ * duplicate key 鈥?and a case that only passes once is worse than no case.
  */
 function sampleFor(field) {
   const name = field.name.toLowerCase()
@@ -365,7 +365,7 @@ function readController(source, file, root) {
   }
 
   const endpoints = []
-  // A class-level @RequestMapping is not an endpoint — it is the prefix every
+  // A class-level @RequestMapping is not an endpoint 鈥?it is the prefix every
   // method below it inherits. Skipping it is the difference between reporting
   // `POST /auth/register` and also reporting a phantom `GET /auth/auth`.
   const classMappingIndex = classMatch
@@ -444,7 +444,7 @@ function readEntity(source, file, root) {
  * Scans a project directory and returns what a case author needs to know.
  *
  * Returns endpoints, the DTOs they accept, and the entities/tables the project
- * maps — never a guess about which database those tables live in, because that is
+ * maps 鈥?never a guess about which database those tables live in, because that is
  * a deployment fact the source code does not contain.
  */
 export async function scanProject(input = {}) {
@@ -493,7 +493,7 @@ export async function scanProject(input = {}) {
 
   // Resolve every @RequestBody type to its fields. A type the scanner cannot find
   // stays unresolved rather than becoming an empty object, because an empty body
-  // would look like "the endpoint takes no input" — a different claim.
+  // would look like "the endpoint takes no input" 鈥?a different claim.
   const dtos = []
   const endpoints = []
   for (const controller of controllers) {
@@ -536,3 +536,203 @@ export async function scanProject(input = {}) {
 }
 
 export { sampleFor, readDtoClass, stripComments }
+
+// --- baseUrl derivation -----------------------------------------------------
+
+/**
+ * Reads a Spring project's own configuration to answer "where does this run".
+ *
+ * The create-project form no longer asks for a Base URL: a Spring Boot project
+ * declares its port and context path itself, in `application.yml` /
+ * `application.properties`. Reading that beats asking for it 鈥?a hand-typed URL
+ * is one more thing to get wrong, and the source file is the truth the service
+ * will actually bind to.
+ *
+ * Only the conventional locations are read 鈥?`src/main/resources/application.*`
+ * and its `application-<profile>` siblings 鈥?because those are what a local run
+ * uses. `application-<profile>` files are consulted when the default file has
+ * no port of its own, in file order; a port set only under a profile is still
+ * a port the developer's run configuration will pick up when that profile is
+ * active, and "mostly right, clearly labelled" beats refusing the form.
+ *
+ * Returns `{ baseUrl, port, contextPath, source }`, or `{ baseUrl: null, ... }`
+ * with warnings when nothing can be derived 鈥?the caller decides whether that
+ * is fatal. The scheme is `https` when a keystore is configured, `http`
+ * otherwise; port 8080 is Spring Boot's own default, not a guess this makes.
+ */
+const RESOURCE_DIR = join('src', 'main', 'resources')
+const CONFIG_FILES = ['application.yml', 'application.yaml', 'application.properties']
+
+export async function guessBaseUrl(projectPath) {
+  const warnings = []
+  let root
+  try {
+    const info = await stat(projectPath)
+    if (!info.isDirectory()) {
+      return { baseUrl: null, port: null, contextPath: '', source: null, warnings: [`${projectPath} is not a directory`] }
+    }
+    root = projectPath
+  } catch (error) {
+    return { baseUrl: null, port: null, contextPath: '', source: null, warnings: [`cannot read ${projectPath}: ${error.message}`] }
+  }
+
+  // Resource paths are reported with forward slashes so the value is stable
+  // across platforms 鈥?this string lands in the registry and the UI.
+  const resourceDirName = 'src/main/resources'
+  const resourceDir = join(root, RESOURCE_DIR)
+  let entries
+  try {
+    entries = await readdir(resourceDir)
+  } catch {
+    return {
+      baseUrl: null,
+      port: null,
+      contextPath: '',
+      source: null,
+      warnings: [`no ${resourceDirName} under ${projectPath}, so the port cannot be read from the project`],
+    }
+  }
+
+  // Default file first, then profile-specific ones in name order 鈥?that order
+  // is also the order Spring itself would let a profile override the default.
+  const names = CONFIG_FILES.filter((name) => entries.includes(name))
+  const profiled = entries
+    .filter((name) => /^application-.+\.(yml|yaml|properties)$/.test(name))
+    .sort()
+  const candidates = [...names, ...profiled]
+
+  let port = null
+  let contextPath = ''
+  let ssl = false
+  let source = null
+
+  for (const name of candidates) {
+    const file = join(resourceDir, name)
+    let text
+    try {
+      text = await readFile(file, 'utf8')
+    } catch (error) {
+      warnings.push(`cannot read ${resourceDirName}/${name}: ${error.message}`)
+      continue
+    }
+    const clean = stripPropertiesComments(text)
+
+    if (port === null) {
+      const found = name.endsWith('.properties')
+        ? propertyValue(clean, ['server', 'port'])
+        : await yamlValue(text, ['server', 'port'], file)
+      if (found !== undefined && found !== null && String(found).trim() !== '') {
+        const parsed = Number(String(found).trim())
+        if (Number.isInteger(parsed) && parsed > 0 && parsed < 65536) {
+          port = parsed
+          source = `${resourceDirName}/${name}`
+        } else {
+          warnings.push(`${resourceDirName}/${name}: server.port "${found}" is not a usable port; ignored`)
+        }
+      }
+    }
+    if (!contextPath) {
+      const keys = [
+        ['server', 'servlet', 'context-path'],
+        ['server', 'servlet', 'contextPath'],
+        ['server', 'context-path'],
+      ]
+      for (const key of keys) {
+        const found = name.endsWith('.properties')
+          ? propertyValue(clean, key)
+          : await yamlValue(text, key, file)
+        if (found !== undefined && found !== null && String(found).trim() !== '') {
+          contextPath = String(found).trim()
+          if (!source) source = `${resourceDirName}/${name}`
+          break
+        }
+      }
+    }
+    if (!ssl) {
+      const keystore = name.endsWith('.properties')
+        ? propertyValue(clean, ['server', 'ssl', 'key-store'])
+        : await yamlValue(text, ['server', 'ssl', 'key-store'], file)
+      ssl = Boolean(keystore && String(keystore).trim())
+      if (ssl && !source) source = `${resourceDirName}/${name}`
+    }
+    // A port from the default file wins outright; profile files only fill in
+    // what the default file left unset.
+    if (port !== null && contextPath && ssl) break
+  }
+
+  if (port === null) {
+    warnings.push(`no server.port found under ${resourceDirName}; Spring Boot's default 8080 was assumed`)
+    port = 8080
+  }
+
+  const scheme = ssl ? 'https' : 'http'
+  const path = contextPath.replace(/^\/*/, '').replace(/\/*$/, '')
+  const baseUrl = `${scheme}://127.0.0.1:${port}${path ? `/${path}` : ''}`
+  return { baseUrl, port, contextPath: contextPath || '', source, warnings }
+}
+
+/** Strips `#` and `!` comments from a .properties body, keeping line structure. */
+function stripPropertiesComments(text) {
+  return text
+    .split('\n')
+    .map((line) => line.replace(/^\s*[#!].*$/, ''))
+    .join('\n')
+}
+
+/**
+ * One property from a .properties body: `server.port=8080` and its
+ * `server.port : 8080` / `server\!.port` relatives. Only dotted literal keys are
+ * matched 鈥?a key built by property expansion is not an answer this guesses.
+ */
+function propertyValue(clean, keys) {
+  const pattern = new RegExp(
+    `^[ \\t]*${keys.map((part) => part.replace(/[.]/g, '\\.').replace(/!/g, '\\!')).join('\\.')}[ \\t]*[:=][ \\t]*(.+?)[ \\t]*$`,
+    'm',
+  )
+  const match = pattern.exec(clean)
+  return match ? match[1] : undefined
+}
+
+/**
+ * One nested value from a YAML document: the `port:` under a `server:` mapping.
+ * The vendored parser is deliberately not used here 鈥?the file may be half
+ * invalid for reasons that do not concern the port (tabs elsewhere, a broken
+ * list at the bottom), and refusing to derive a URL because of that would make
+ * the form fail on projects Spring itself still runs. A small indent-walk is
+ * the right tool for reading two scalars; full parsing is not the goal.
+ */
+async function yamlValue(text, keys, file) {
+  const lines = text.split('\n')
+  let index = 0
+
+  const walk = (depth, remaining) => {
+    if (remaining.length === 0) return undefined
+    const key = remaining[0]
+    const prefix = '  '.repeat(depth)
+    const pattern = new RegExp(`^${prefix}([A-Za-z0-9_.-]+):(?:[ \\t]+(.*))?$`)
+    while (index < lines.length) {
+      const line = lines[index]
+      index += 1
+      if (line.trim() === '' || /^\s*#/.test(line)) continue
+      if (!line.startsWith(prefix)) {
+        // A line less indented than this mapping ends the search at this depth.
+        if (line.trimStart().length !== line.length) continue
+        return undefined
+      }
+      const match = pattern.exec(line)
+      if (!match || match[1] !== key) continue
+      if (match[2] !== undefined && match[2].trim() !== '') return match[2].trim().replace(/^["']|["']$/g, '')
+      // The value lives below, more indented 鈥?but only its own children.
+      return walk(depth + 1, remaining.slice(1))
+    }
+    return undefined
+  }
+
+  try {
+    return walk(0, keys)
+  } catch (error) {
+    // yamlValue walks a finite list, so a throw here is a defect in the walk,
+    // not in the file; say where rather than fail the whole derivation.
+    throw new ScanError(`cannot read ${keys.join('.')} from ${file}: ${error.message}`)
+  }
+}

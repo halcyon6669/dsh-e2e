@@ -246,13 +246,12 @@ window.__ModuleLoader__.load({
         'action.createProject': 'Create project',
         'action.create': 'Create',
         'action.creating': 'Creating…',
-        'notice.projectCreated': 'Project {name} created. Cases live in {dir}; new cases will name it in env.target.',
+        'notice.projectCreated': 'Project {name} created. Base URL {baseUrl} was read from the project; cases live in {dir}.',
         'field.projectName': 'Project name (letters, digits, dashes)',
-        'field.baseUrl': 'Base URL, like https://127.0.0.1:8443',
-        'field.projectPath': 'Project path (optional)',
-        'field.configurationName': 'Run configuration (optional)',
-        'label.allowRemote': 'Remote host',
-        'label.allowRemoteHint': 'The host is not loopback or a private address; check only when testing a remote machine.',
+        'field.projectPath': 'Project path (required — the Base URL is read from its application.yml)',
+        'label.projectDeleted': 'Project {name} deleted.',
+        'label.deleteProject': 'Delete project',
+        'label.deleteProjectConfirm': 'Delete for real (cases stay, history stays)',
         'label.diagnostic': 'Diagnostics',
         'label.actions': 'Actions',
         'label.selectCase': 'Select this case',
@@ -495,13 +494,12 @@ window.__ModuleLoader__.load({
         'action.createProject': '创建项目',
         'action.create': '创建',
         'action.creating': '创建中…',
-        'notice.projectCreated': '项目 {name} 已创建。用例放在 {dir}；新用例会在 env.target 里写它的名字。',
+        'notice.projectCreated': '项目 {name} 已创建。Base URL（{baseUrl}）是从项目里读出来的；用例放在 {dir}。',
         'field.projectName': '项目名（字母、数字、短横线）',
-        'field.baseUrl': 'Base URL，如 https://127.0.0.1:8443',
-        'field.projectPath': '项目路径（可选）',
-        'field.configurationName': '运行配置（可选）',
-        'label.allowRemote': '远程主机',
-        'label.allowRemoteHint': '目标不是本机或内网地址；只在测试远程机器时勾选。',
+        'field.projectPath': '项目路径（必填 — Base URL 会从它的 application.yml 读取）',
+        'label.projectDeleted': '项目 {name} 已删除。',
+        'label.deleteProject': '删除项目',
+        'label.deleteProjectConfirm': '确认删除（用例保留，历史保留）',
         'label.diagnostic': '诊断与异常',
         'label.actions': '操作',
         'label.selectCase': '选中这条用例',
@@ -683,7 +681,7 @@ window.__ModuleLoader__.load({
      * the percentages are derived from counts the Host already computed, so the
      * page and the agent can never disagree about them.
      */
-    function ProjectTable({ t, projects, onOpen, creator }) {
+    function ProjectTable({ t, projects, onOpen, onDelete, pendingDelete, creator }) {
       if (!projects || projects.length === 0) {
         return h('div', { className: 'e2e-empty-box' }, t('empty.noProjects'))
       }
@@ -696,61 +694,82 @@ window.__ModuleLoader__.load({
           const pct = (value) => (total > 0 ? `${Math.round((value / total) * 1000) / 10}%` : '0%')
           const rate = total > 0 ? pct(counts.passed) : '—'
           const allPassed = total > 0 && counts.passed === total
+          const armed = Boolean(pendingDelete && pendingDelete.key === project.key)
+          // The card is a button, and a button inside a button is the kind of
+          // markup browsers "fix" by breaking: the delete control sits beside the
+          // card, wrapped together in a positioned cell.
           return h(
-            'button',
-            {
-              key: project.key,
-              type: 'button',
-              className: 'e2e-project-card',
-              onClick: () => onOpen(project),
-              title: `${t('action.openProject')} — ${project.projectPath || project.baseUrl || project.key}`,
-            },
+            'div',
+            { key: project.key, className: 'e2e-project-cell' },
             h(
-              'div',
-              { className: 'e2e-project-head' },
+              'button',
+              {
+                type: 'button',
+                className: 'e2e-project-card',
+                onClick: () => onOpen(project),
+                title: `${t('action.openProject')} — ${project.projectPath || project.baseUrl || project.key}`,
+              },
               h(
                 'div',
-                { className: 'e2e-project-title' },
-                h('span', { className: `e2e-project-dot${allPassed ? '' : ' is-pulse'}` }),
-                h('strong', null, project.name),
-                h('span', { className: 'e2e-project-badge' }, (project.type || '').toUpperCase() || t('label.type.unknown')),
-              ),
-              h(
-                'div',
-                { className: 'e2e-project-rate' },
-                h('span', { className: 'e2e-project-rate-label' }, t('label.passRate')),
-                h('span', { className: 'e2e-project-rate-value' }, rate),
-              ),
-            ),
-            h(
-              'div',
-              { className: 'e2e-project-stack' },
-              h('span', null, project.projectPath || project.baseUrl || project.key),
-              h('span', { className: 'e2e-project-stack-target' }, project.targets && project.targets.length ? project.targets.map((item) => item.name).join(', ') : ''),
-            ),
-            total > 0
-              ? h(
+                { className: 'e2e-project-head' },
+                h(
                   'div',
-                  { className: 'e2e-project-track' },
-                  h('div', { className: 'e2e-project-seg is-pass', style: { flexGrow: Math.max(counts.passed, 0.001) }, title: `${counts.passed} ${t('status.passed')}` }),
-                  h('div', { className: 'e2e-project-seg is-fail', style: { flexGrow: Math.max(counts.failed, 0.001) }, title: `${counts.failed} ${t('status.failed')}` }),
-                  h('div', { className: 'e2e-project-seg is-blocked', style: { flexGrow: Math.max(counts.blocked || 0, 0.001) }, title: `${counts.blocked || 0} ${t('status.blocked')}` }),
-                  h('div', { className: 'e2e-project-seg is-planned', style: { flexGrow: Math.max(counts.notRun, 0.001) }, title: `${counts.notRun} ${t('label.notRun')}` }),
-                )
-              : h('div', { className: 'e2e-project-track e2e-project-track-empty' }),
-            h(
-              'div',
-              { className: 'e2e-project-legend' },
-              h('span', { className: 'e2e-project-legend-item is-pass' }, `${counts.passed} ${t('status.passed')}`),
-              h('span', { className: 'e2e-project-legend-item is-fail' }, `${counts.failed} ${t('status.failed')}`),
-              h('span', { className: 'e2e-project-legend-item is-blocked' }, `${counts.blocked || 0} ${t('status.blocked')}`),
-              h('span', { className: 'e2e-project-legend-item is-planned' }, `${counts.notRun} ${t('label.notRun')}`),
-              h('div', { className: 'e2e-spacer' }),
-              h(
-                'span',
-                { className: 'e2e-project-when', title: absoluteTime(project.lastActivityAt) },
-                `${t('label.lastInspected')}: ${relativeTime(t, project.lastActivityAt)}`,
+                  { className: 'e2e-project-title' },
+                  h('span', { className: `e2e-project-dot${allPassed ? '' : ' is-pulse'}` }),
+                  h('strong', null, project.name),
+                  h('span', { className: 'e2e-project-badge' }, (project.type || '').toUpperCase() || t('label.type.unknown')),
+                ),
+                h(
+                  'div',
+                  { className: 'e2e-project-rate' },
+                  h('span', { className: 'e2e-project-rate-label' }, t('label.passRate')),
+                  h('span', { className: 'e2e-project-rate-value' }, rate),
+                ),
               ),
+              h(
+                'div',
+                { className: 'e2e-project-stack' },
+                h('span', null, project.projectPath || project.baseUrl || project.key),
+                h('span', { className: 'e2e-project-stack-target' }, project.targets && project.targets.length ? project.targets.map((item) => item.name).join(', ') : ''),
+              ),
+              total > 0
+                ? h(
+                    'div',
+                    { className: 'e2e-project-track' },
+                    h('div', { className: 'e2e-project-seg is-pass', style: { flexGrow: Math.max(counts.passed, 0.001) }, title: `${counts.passed} ${t('status.passed')}` }),
+                    h('div', { className: 'e2e-project-seg is-fail', style: { flexGrow: Math.max(counts.failed, 0.001) }, title: `${counts.failed} ${t('status.failed')}` }),
+                    h('div', { className: 'e2e-project-seg is-blocked', style: { flexGrow: Math.max(counts.blocked || 0, 0.001) }, title: `${counts.blocked || 0} ${t('status.blocked')}` }),
+                    h('div', { className: 'e2e-project-seg is-planned', style: { flexGrow: Math.max(counts.notRun, 0.001) }, title: `${counts.notRun} ${t('label.notRun')}` }),
+                  )
+                : h('div', { className: 'e2e-project-track e2e-project-track-empty' }),
+              h(
+                'div',
+                { className: 'e2e-project-legend' },
+                h('span', { className: 'e2e-project-legend-item is-pass' }, `${counts.passed} ${t('status.passed')}`),
+                h('span', { className: 'e2e-project-legend-item is-fail' }, `${counts.failed} ${t('status.failed')}`),
+                h('span', { className: 'e2e-project-legend-item is-blocked' }, `${counts.blocked || 0} ${t('status.blocked')}`),
+                h('span', { className: 'e2e-project-legend-item is-planned' }, `${counts.notRun} ${t('label.notRun')}`),
+                h('div', { className: 'e2e-spacer' }),
+                h(
+                  'span',
+                  { className: 'e2e-project-when', title: absoluteTime(project.lastActivityAt) },
+                  `${t('label.lastInspected')}: ${relativeTime(t, project.lastActivityAt)}`,
+                ),
+              ),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: `e2e-project-delete${armed ? ' is-armed' : ''}`,
+                title: armed ? t('label.deleteProjectConfirm') : t('label.deleteProject'),
+                'aria-label': `${t('label.deleteProject')}: ${project.name}`,
+                onClick: (event) => {
+                  event.stopPropagation()
+                  onDelete(project)
+                },
+              },
+              armed ? t('label.deleteProjectConfirm') : '×',
             ),
           )
         }),
@@ -2423,7 +2442,7 @@ window.__ModuleLoader__.load({
       const [explaining, setExplaining] = React.useState(false)
       const [creating, setCreating] = React.useState(null) // 'project' on the landing page, a draft file name inside one
       // The create-project form's draft. Reset whenever the form closes.
-      const [projectDraft, setProjectDraft] = React.useState({ name: '', baseUrl: '', projectPath: '', configurationName: '', allowRemote: false })
+      const [projectDraft, setProjectDraft] = React.useState({ name: '', projectPath: '' })
       const [reportText, setReportText] = React.useState(null)
       // Where a freshly generated document will be saved. Kept outside `selected`
       // because a generated case has no file on disk yet.
@@ -2886,9 +2905,37 @@ window.__ModuleLoader__.load({
         setBusy('create')
         try {
           const result = await apiPost('/project', projectDraft)
-          setNotice({ message: t('notice.projectCreated', { name: result.name, dir: result.caseDir }) })
+          setNotice({ message: t('notice.projectCreated', { name: result.name, baseUrl: result.baseUrl, dir: result.caseDir }) })
           setCreating(null)
-          setProjectDraft({ name: '', baseUrl: '', projectPath: '', configurationName: '', allowRemote: false })
+          setProjectDraft({ name: '', projectPath: '' })
+          await refresh()
+        } catch (error) {
+          setNotice({ isError: true, message: error.message })
+        } finally {
+          setBusy(null)
+        }
+      }
+
+      // Deleting a project is a registry edit and a directory removal on the
+      // Host, so it asks twice like a case delete does — and forgets the first
+      // press as fast, because an armed confirm across a coffee break is a trap
+      // with a timer.
+      const [projectPendingDelete, setProjectPendingDelete] = React.useState(null)
+      React.useEffect(() => {
+        if (!projectPendingDelete) return undefined
+        const timer = setTimeout(() => setProjectPendingDelete(null), 4000)
+        return () => clearTimeout(timer)
+      }, [projectPendingDelete])
+      const deleteProject = async (project) => {
+        if (!projectPendingDelete || projectPendingDelete.key !== project.key) {
+          setProjectPendingDelete(project)
+          return
+        }
+        setProjectPendingDelete(null)
+        setBusy('delete-project')
+        try {
+          await apiDelete(`/project?name=${q(project.name)}`)
+          setNotice({ message: t('label.projectDeleted', { name: project.name }) })
           await refresh()
         } catch (error) {
           setNotice({ isError: true, message: error.message })
@@ -3089,7 +3136,8 @@ window.__ModuleLoader__.load({
           : null,
         // On the landing page the subtitle line is the create-project form. It
         // occupies the strip the reader just asked to be quieter: the same
-        // height, now earning it.
+        // height, now earning it. No Base URL field: the Host reads it from the
+        // project's application.yml, so the path is the only thing to type.
         !project && creating === 'project'
           ? h(
               'div',
@@ -3102,37 +3150,15 @@ window.__ModuleLoader__.load({
               }),
               h('input', {
                 className: 'e2e-input e2e-project-field is-wide',
-                placeholder: t('field.baseUrl'),
-                value: projectDraft.baseUrl,
-                onChange: (event) => setProjectDraft({ ...projectDraft, baseUrl: event.target.value }),
-              }),
-              h('input', {
-                className: 'e2e-input e2e-project-field is-wide',
                 placeholder: t('field.projectPath'),
                 value: projectDraft.projectPath,
                 onChange: (event) => setProjectDraft({ ...projectDraft, projectPath: event.target.value }),
               }),
-              h('input', {
-                className: 'e2e-input e2e-project-field',
-                placeholder: t('field.configurationName'),
-                value: projectDraft.configurationName,
-                onChange: (event) => setProjectDraft({ ...projectDraft, configurationName: event.target.value }),
-              }),
-              h(
-                'label',
-                { className: 'e2e-project-remote', title: t('label.allowRemoteHint') },
-                h('input', {
-                  type: 'checkbox',
-                  checked: projectDraft.allowRemote,
-                  onChange: (event) => setProjectDraft({ ...projectDraft, allowRemote: event.target.checked }),
-                }),
-                t('label.allowRemote'),
-              ),
               h('div', { className: 'e2e-spacer' }),
               h(Btn, { small: true, onClick: () => setCreating('') }, t('action.cancel')),
               h(
                 Btn,
-                { small: true, primary: true, disabled: busy === 'create', onClick: createProject },
+                { small: true, primary: true, disabled: busy === 'create' || !projectDraft.name.trim() || !projectDraft.projectPath.trim(), onClick: createProject },
                 busy === 'create' ? t('action.creating') : t('action.create'),
               ),
             )
@@ -3499,6 +3525,8 @@ window.__ModuleLoader__.load({
               t,
               projects,
               creator: projectData.creator,
+              onDelete: deleteProject,
+              pendingDelete: projectPendingDelete,
               onOpen: (next) => {
                 setOpenProject(next)
                 setSelected(null)
@@ -3683,12 +3711,37 @@ window.__ModuleLoader__.load({
 
 /* The project cards: the landing surface after the Stitch design — headline
    pass rate, a segmented track, and a legend. The card is a button because
-   opening a project is its whole job. */
+   opening a project is its whole job; the delete control therefore cannot be
+   one of its children, so each card sits in a positioned cell and the delete
+   button floats in its corner. */
 .e2e-project-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 12px;
 }
+.e2e-project-cell { position: relative; }
+.e2e-project-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 110ms ease, background 110ms ease, color 110ms ease;
+}
+.e2e-project-cell:hover .e2e-project-delete { opacity: 1; }
+.e2e-project-delete:hover { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent); color: var(--dsw-alias-state-error-primary); }
+.e2e-project-delete.is-armed { opacity: 1; background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent); color: var(--dsw-alias-state-error-primary); font-size: 9px; font-weight: 600; width: auto; padding: 0 8px; white-space: nowrap; }
 .e2e-project-card {
   appearance: none;
   border: 1px solid var(--dsw-alias-border-l1);
