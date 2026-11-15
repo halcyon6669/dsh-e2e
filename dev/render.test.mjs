@@ -351,13 +351,11 @@ globalThis.fetch = async (url) => {
   requested.push(path)
   const body = path.startsWith('/projects')
     ? PROJECTS
-    : path.startsWith('/browse')
-      ? { ok: true, path: 'C:\\work', parent: 'C:\\', dirs: [{ name: 'Record', path: 'C:\\work\\Record' }], drives: ['C:\\'], error: null }
-      : path.startsWith('/case?')
-        ? CASE_FILE
-        : path.startsWith('/report?')
-          ? PAST_REPORT
-          : BOOTSTRAP
+    : path.startsWith('/case?')
+      ? CASE_FILE
+      : path.startsWith('/report?')
+        ? PAST_REPORT
+        : BOOTSTRAP
   return { ok: true, status: 200, json: async () => body }
 }
 
@@ -547,35 +545,47 @@ await test('the landing page offers to create a project, and the form appears in
       textOf(node).trim() === 'Create',
   )
   assert.ok(submit, 'the form has its own create button')
-  // Clicking the path itself asks the file manager, without hunting for a
-  // button: typing a long Windows path by hand is what this field avoids.
+  // Clicking the path asks the system file manager: typing a long Windows path
+  // by hand is what this field avoids. The dialog is the Desktop window's own —
+  // the panel ships no folder browser of its own.
   assert.equal(typeof pathField.props.onClick, 'function', 'the path field opens the file manager when clicked')
+  const picks = []
+  globalThis.__DSH_DIRECTORY_PICKER__ = {
+    pick: async () => {
+      picks.push('path')
+      return 'C:\\work'
+    },
+  }
   pathField.props.onClick()
-  const clickedOpen = await settle(() => mainComponent({}))
-  assert.match(textOf(clickedOpen), /Pick a project folder/, 'a click on the path opens the folder browser')
-  // The path can also be found in the file manager: a browser cannot read a
-  // local folder, so the Host walks one level at a time over /browse.
+  const chosen = await settle(() => mainComponent({}))
+  const pathValue = (tree) =>
+    elementsOf(tree).filter((node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'))[1].props.value
+  assert.equal(pathValue(chosen), 'C:\\work', 'the folder the dialog returned becomes the project path')
+  // The button beside the field does the same thing, for anyone looking for one.
   const browse = elementsOf(opened).find(
     (node) =>
       node.props &&
       ['e2e-btn'].some((name) => String(node.props.className || '').split(' ').includes(name)) &&
-      textOf(node).trim() === 'Browse',
+      textOf(node).trim() === 'Browse…',
   )
-  assert.ok(browse, 'the form offers a folder browser')
+  assert.ok(browse, 'the form offers the folder dialog as a button too')
+  globalThis.__DSH_DIRECTORY_PICKER__ = {
+    pick: async () => {
+      picks.push('button')
+      return null
+    },
+  }
   browse.props.onClick()
-  const browsing = await settle(() => mainComponent({}))
-  assert.match(textOf(browsing), /Pick a project folder/, 'the browser is a panel of its own')
-  assert.match(textOf(browsing), /Record/, 'the browser lists the Host folders')
-  const useFolder = elementsOf(browsing).find(
-    (node) => node.props && node.props.onClick && textOf(node).trim() === 'Use this folder',
-  )
-  assert.ok(useFolder, 'the browser can hand the current folder back to the form')
-  useFolder.props.onClick()
-  const chosen = await settle(() => mainComponent({}))
-  const chosenInputs = elementsOf(chosen).filter(
-    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'),
-  )
-  assert.equal(chosenInputs[1].props.value, 'C:\\work', 'the chosen folder becomes the project path')
+  const cancelled = await settle(() => mainComponent({}))
+  assert.equal(pathValue(cancelled), 'C:\\work', 'a dismissed dialog leaves the path exactly as it was')
+  assert.equal(picks.length, 2, 'both the field and the button open the dialog')
+  // In an ordinary browser tab there is no bridge. The field still takes a typed
+  // path, and the button says why the dialog did not open instead of doing
+  // nothing at all.
+  delete globalThis.__DSH_DIRECTORY_PICKER__
+  browse.props.onClick()
+  const unavailable = await settle(() => mainComponent({}))
+  assert.match(textOf(unavailable), /no system file manager/, 'a missing bridge is reported, not ignored')
 })
 
 await test('the landing page has no per-card delete; deletion lives in edit mode', async () => {

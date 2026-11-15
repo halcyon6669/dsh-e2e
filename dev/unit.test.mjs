@@ -1363,44 +1363,6 @@ await testAsync('a YAML read still works, and a syntax error names the file', as
   )
 })
 
-section('browse') // read-only folder walking for the create-project form
-
-// The browser cannot read a local path, so the Host walks one level at a time.
-// Only directories are offered, a folder that cannot be entered is skipped, and
-// a missing path is a field in the response, not a 500 that blanks the picker.
-await testAsync('the folder browser lists directories under a real path', async () => {
-  const root = join(tmpDir, 'browse-root')
-  await mkdir(join(root, 'alpha'), { recursive: true })
-  await mkdir(join(root, 'beta'), { recursive: true })
-  await writeFile(join(root, 'case.yaml'), 'id: x\n')
-  const response = {
-    writeHead() {},
-    end(payload) {
-      this.body = payload
-    },
-  }
-  await projectPanel.handle({ url: `/plugins/e2e/api/browse?path=${encodeURIComponent(root)}`, method: 'GET' }, response)
-  const data = JSON.parse(response.body)
-  assert.equal(data.ok, true)
-  assert.equal(data.path, root)
-  assert.deepEqual(data.dirs.map((dir) => dir.name).sort(), ['alpha', 'beta'])
-  assert.equal(data.dirs.some((dir) => dir.name === 'case.yaml'), false, 'a file was offered as a folder')
-})
-
-await testAsync('an unreadable folder is reported, not thrown', async () => {
-  const response = {
-    writeHead() {},
-    end(payload) {
-      this.body = payload
-    },
-  }
-  await projectPanel.handle({ url: `/plugins/e2e/api/browse?path=${encodeURIComponent(join(tmpDir, 'browse-root', 'does-not-exist'))}`, method: 'GET' }, response)
-  const data = JSON.parse(response.body)
-  assert.equal(data.ok, true)
-  assert.ok(data.error, 'the picker needs the reason it cannot list this folder')
-  assert.deepEqual(data.dirs, [])
-})
-
 // ---------------------------------------------------------------- done
 
 await rm(tmpDir, { recursive: true, force: true })

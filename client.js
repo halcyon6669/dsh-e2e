@@ -252,14 +252,8 @@ window.__ModuleLoader__.load({
         'notice.projectCreated': 'Project {name} created. Base URL {baseUrl} was read from the project; cases live in {dir}.',
         'field.projectName': 'Project name (letters, digits, dashes)',
         'field.projectPath': 'Project path (required — the Base URL is read from its application.yml)',
-        'action.browse': 'Browse',
-        'action.useFolder': 'Use this folder',
-        'action.up': 'Up',
-        'label.browseTitle': 'Pick a project folder',
-        'label.browseCurrent': 'Current folder: {path}',
-        'label.browseDrives': 'Drives',
-        'label.browseEmpty': 'No subfolders here.',
-        'state.browseLoading': 'Reading folders…',
+        'action.browse': 'Browse…',
+        'notice.pickerUnavailable': 'This window has no system file manager, so type the project path instead.',
         'notice.projectsDeleted': '{count} project(s) deleted.',
         'notice.projectsPartlyDeleted': '{done} deleted, {failed} failed: {errors}',
         'label.pickProjects': 'Pick this project',
@@ -511,14 +505,8 @@ window.__ModuleLoader__.load({
         'notice.projectCreated': '项目 {name} 已创建。Base URL（{baseUrl}）是从项目里读出来的；用例放在 {dir}。',
         'field.projectName': '项目名（字母、数字、短横线）',
         'field.projectPath': '项目路径（必填 — Base URL 会从它的 application.yml 读取）',
-        'action.browse': '浏览',
-        'action.useFolder': '使用此文件夹',
-        'action.up': '上一级',
-        'label.browseTitle': '选择项目文件夹',
-        'label.browseCurrent': '当前文件夹：{path}',
-        'label.browseDrives': '磁盘驱动器',
-        'label.browseEmpty': '这里没有子文件夹。',
-        'state.browseLoading': '正在读取文件夹…',
+        'action.browse': '浏览…',
+        'notice.pickerUnavailable': '这个窗口没有系统文件管理器，请直接输入项目路径。',
         'notice.projectsDeleted': '已删除 {count} 个项目。',
         'notice.projectsPartlyDeleted': '已删除 {done} 个，{failed} 个失败：{errors}',
         'label.pickProjects': '选中这个项目',
@@ -655,58 +643,18 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * A read-only file manager for the create-project form. The Host walks the
-     * filesystem one directory at a time; this shows that walk and lets the
-     * reader take the current folder as the project path.
+     * The Desktop window hands the page a bridge to the OS folder dialog:
+     * `__DSH_DIRECTORY_PICKER__.pick()` resolves to the chosen folder, or null
+     * when the dialog was dismissed. It is the same mechanism the Harness's own
+     * workspace picker uses, so the create form opens the real file manager
+     * instead of a second browser written by hand.
+     *
+     * Absent when the panel is open in an ordinary browser tab (the bridge is
+     * only exposed on the dsh-app:// document): there the field stays typeable.
      */
-    function FolderPicker(props) {
-      const { t, picker } = props
-      return h(
-        'div',
-        { className: 'e2e-picker-backdrop', onClick: props.onClose },
-        h(
-          'div',
-          { className: 'e2e-picker', onClick: (event) => event.stopPropagation() },
-          h('h3', { className: 'e2e-section-title' }, t('label.browseTitle')),
-          h('div', { className: 'e2e-picker-path' }, t('label.browseCurrent', { path: picker.path || '' })),
-          picker.error ? h('div', { className: 'e2e-warning' }, picker.error) : null,
-          picker.loading ? h('div', { className: 'e2e-muted' }, t('state.browseLoading')) : null,
-          picker.drives && picker.drives.length > 0
-            ? h(
-                'div',
-                { className: 'e2e-picker-drives' },
-                h('span', { className: 'e2e-muted' }, t('label.browseDrives')),
-                picker.drives.map((drive) =>
-                  h('button', { key: drive, type: 'button', className: 'e2e-btn is-small', onClick: () => props.onBrowse(drive) }, drive),
-                ),
-              )
-            : null,
-          h(
-            'div',
-            { className: 'e2e-picker-list' },
-            picker.loading
-              ? null
-              : picker.dirs.length === 0
-                ? h('div', { className: 'e2e-muted' }, t('label.browseEmpty'))
-                : picker.dirs.map((dir) =>
-                    h(
-                      'button',
-                      { key: dir.path, type: 'button', className: 'e2e-picker-row', onClick: () => props.onBrowse(dir.path) },
-                      h('span', null, dir.name),
-                      h('span', { className: 'e2e-muted' }, dir.path),
-                    ),
-                  ),
-          ),
-          h(
-            'div',
-            { className: 'e2e-picker-actions' },
-            h(Btn, { small: true, disabled: !picker.parent, onClick: () => props.onBrowse(picker.parent) }, t('action.up')),
-            h('div', { className: 'e2e-spacer' }),
-            h(Btn, { small: true, onClick: props.onClose }, t('action.cancel')),
-            h(Btn, { small: true, variant: 'primary', disabled: !picker.path, onClick: () => props.onChoose(picker.path) }, t('action.useFolder')),
-          ),
-        ),
-      )
+    function systemPicker() {
+      const bridge = globalThis.__DSH_DIRECTORY_PICKER__
+      return bridge && typeof bridge.pick === 'function' ? bridge : null
     }
 
     function verdictTone(verdict) {
@@ -2513,9 +2461,9 @@ window.__ModuleLoader__.load({
       const [creating, setCreating] = React.useState(null) // 'project' on the landing page, a draft file name inside one
       // The create-project form's draft. Reset whenever the form closes.
       const [projectDraft, setProjectDraft] = React.useState({ name: '', projectPath: '' })
-      // The create form's folder picker. Null when closed; otherwise the folder
-      // being browsed and its entries, loaded from the Host one level at a time.
-      const [folderPicker, setFolderPicker] = React.useState(null)
+      // True while the system folder dialog is open, so a second click on the
+      // path cannot stack a second dialog on top of the first.
+      const [pickingFolder, setPickingFolder] = React.useState(false)
       const [reportText, setReportText] = React.useState(null)
       // Where a freshly generated document will be saved. Kept outside `selected`
       // because a generated case has no file on disk yet.
@@ -2970,22 +2918,33 @@ window.__ModuleLoader__.load({
         }
       }
 
-      // The folder picker walks the Host filesystem one directory at a time: a
-      // browser cannot read a local path, but /browse can. A folder the Host
-      // cannot enter is simply left out of the list.
-      const browseFolder = async (path) => {
-        setFolderPicker({ path: path || null, dirs: [], drives: [], loading: true, error: null })
-        try {
-          const data = await apiGet(`/browse${path ? `?path=${q(path)}` : ''}`)
-          setFolderPicker({ path: data.path || null, parent: data.parent || null, dirs: data.dirs || [], drives: data.drives || [], loading: false, error: data.error || null })
-        } catch (error) {
-          setFolderPicker({ path: path || null, dirs: [], drives: [], loading: false, error: error.message })
+      /**
+       * Opens the system folder dialog and writes what it returned into the
+       * form. Cancel (null) leaves the field exactly as it was — a dismissed
+       * dialog is not a mistake to report.
+       *
+       * The bridge is only there in the Desktop window. In a plain browser tab
+       * the message says so once, rather than a button that silently does
+       * nothing; the field still takes a typed path.
+       */
+      const browseFolder = async () => {
+        const picker = systemPicker()
+        if (!picker) {
+          setNotice({ isError: true, message: t('notice.pickerUnavailable') })
+          return
         }
-      }
-
-      const chooseFolder = (path) => {
-        setProjectDraft((draft) => ({ ...draft, projectPath: path }))
-        setFolderPicker(null)
+        if (pickingFolder) return
+        setPickingFolder(true)
+        try {
+          const chosen = await picker.pick()
+          if (typeof chosen === 'string' && chosen.trim() !== '') {
+            setProjectDraft((draft) => ({ ...draft, projectPath: chosen }))
+          }
+        } catch (error) {
+          setNotice({ isError: true, message: String((error && error.message) || error) })
+        } finally {
+          setPickingFolder(false)
+        }
       }
 
       // Creating a project writes the registry and makes a case directory on the
@@ -3291,16 +3250,16 @@ window.__ModuleLoader__.load({
               }),
               // A click on the path is a request for the file manager: typing a
               // long Windows path by hand is the thing this field exists to
-              // avoid. The field still takes typed input, and the button beside
-              // it does the same thing for anyone who looks for a button.
+              // avoid. The system dialog decides what a folder is; the field
+              // still takes typed input for paths no dialog is needed for.
               h('input', {
                 className: 'e2e-input e2e-project-field is-wide',
                 placeholder: t('field.projectPath'),
                 value: projectDraft.projectPath,
-                onClick: () => browseFolder(projectDraft.projectPath.trim() || null),
+                onClick: browseFolder,
                 onChange: (event) => setProjectDraft({ ...projectDraft, projectPath: event.target.value }),
               }),
-              h(Btn, { small: true, onClick: () => browseFolder(projectDraft.projectPath.trim() || null) }, t('action.browse')),
+              h(Btn, { small: true, disabled: pickingFolder, onClick: browseFolder }, t('action.browse')),
               h('div', { className: 'e2e-spacer' }),
               h(Btn, { small: true, onClick: () => setCreating('') }, t('action.cancel')),
               h(
@@ -3654,9 +3613,6 @@ window.__ModuleLoader__.load({
           { className: 'e2e-root' },
           h('style', null, STYLE),
           header,
-          folderPicker
-            ? h(FolderPicker, { t, picker: folderPicker, onBrowse: browseFolder, onChoose: chooseFolder, onClose: () => setFolderPicker(null) })
-            : null,
           notice
             ? h(
                 'div',
@@ -4766,14 +4722,6 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-endpoint-path { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-create { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px 8px; }
 .e2e-project-field.is-wide { cursor: pointer; }
-.e2e-picker-backdrop { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dsw-alias-bg-base) 80%, transparent); }
-.e2e-picker { width: min(560px, 90vw); max-height: 70vh; display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); box-shadow: 0 12px 32px color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent); }
-.e2e-picker-path { font-size: 11.5px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.e2e-picker-drives { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.e2e-picker-list { flex: 1 1 auto; min-height: 120px; overflow: auto; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 4px; background: var(--dsw-alias-bg-base); }
-.e2e-picker-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; border: 0; border-radius: 6px; background: transparent; color: inherit; padding: 6px 8px; cursor: pointer; font-size: 12px; }
-.e2e-picker-row:hover { background: var(--dsw-alias-bg-layer-2); }
-.e2e-picker-actions { display: flex; gap: 6px; align-items: center; }
 `
 
     return {

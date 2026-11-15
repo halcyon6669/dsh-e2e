@@ -860,53 +860,6 @@ export function createPanel({ ctx, config = {}, state }) {
   }
 
   /**
-   * A small, read-only directory listing for the create-project form. The project
-   * path is a local folder on the machine running the service, so the browser
-   * cannot see it: this endpoint walks it one directory at a time instead. It is
-   * deliberately a list of directories only — a case file is never picked here —
-   * and an unreadable folder is reported in the response rather than turning the
-   * whole panel into a 500.
-   */
-  async function browseDirectories(url) {
-    const requested = url.searchParams.get('path')
-    const path = requested ? resolve(requested) : process.cwd()
-    let entries = []
-    let error = null
-    try {
-      entries = await readdir(path, { withFileTypes: true })
-    } catch (readError) {
-      error = String((readError && readError.message) || readError)
-    }
-    const dirs = []
-    if (!error) {
-      const visible = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-      for (const entry of visible) {
-        const child = join(path, entry.name)
-        try {
-          await readdir(child)
-          dirs.push({ name: entry.name, path: child })
-        } catch {
-          /* a folder we cannot enter is not offered as a destination */
-        }
-      }
-    }
-    const parent = dirname(path)
-    const drives = []
-    if (process.platform === 'win32') {
-      for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZAB') {
-        const drive = `${letter}:\\`
-        try {
-          await readdir(drive)
-          drives.push(drive)
-        } catch {
-          /* a drive that is not mounted is not offered */
-        }
-      }
-    }
-    return { ok: true, path, parent: parent === path ? null : parent, dirs, drives, error }
-  }
-
-  /**
    * Routes. Kept as a table rather than a chain of `if`s so the method, the
    * mutating bit and the handler sit on one line each — a route that changes state
    * is then visible at a glance.
@@ -949,7 +902,6 @@ export function createPanel({ ctx, config = {}, state }) {
     } },
     { method: 'GET', path: '/reports', handler: async () => listReports({ config, state }) },
     { method: 'GET', path: '/projects', handler: async () => listProjects({ config, state, env: process.env }) },
-    { method: 'GET', path: '/browse', handler: async (_body, url) => browseDirectories(url) },
     { method: 'POST', path: '/project', mutate: true, handler: async (body) => createProject(body) },
     { method: 'DELETE', path: '/project', mutate: true, handler: async (_body, url) => deleteProject({ name: url.searchParams.get('name') }) },
     {
