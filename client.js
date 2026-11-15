@@ -240,9 +240,11 @@ window.__ModuleLoader__.load({
         'label.env': 'ENV',
         'label.origin': 'ORIGIN',
         'label.suite': 'SUITE',
-        'nav.tab.cases': 'Cases',
-        'nav.tab.detail': 'Evidence',
-        'nav.tab.plan': 'Test plan',
+        // The two halves of one case. They belong to the case, not to the
+        // project, so they are a switch inside it rather than tabs beside
+        // "cases" — a project has one page, and every case has these two.
+        'label.caseView.evidence': 'Evidence',
+        'label.caseView.plan': 'Test plan',
         'action.runSelected': 'Run selected',
         'action.runFullRegression': 'Run full regression',
         'action.createProject': 'Create project',
@@ -494,9 +496,10 @@ window.__ModuleLoader__.load({
         'label.env': '环境',
         'label.origin': 'ORIGIN',
         'label.suite': 'SUITE',
-        'nav.tab.cases': '项目与用例清单',
-        'nav.tab.detail': '用例详情与证据',
-        'nav.tab.plan': '测试计划编辑',
+        // 同一个用例的两半。它们属于用例，不属于项目，所以是用例里的一个切换，
+        // 而不是和“项目与用例清单”并排的 tab——项目只有一页，每个用例各有这两半。
+        'label.caseView.evidence': '证据',
+        'label.caseView.plan': '测试计划',
         'action.runSelected': '运行选中用例',
         'action.runFullRegression': '执行全量回归',
         'action.createProject': '创建项目',
@@ -3205,21 +3208,25 @@ window.__ModuleLoader__.load({
       const selectedFiles = projectCases.filter((entry) => checked[entry.file]).map((entry) => entry.file)
 
       // ---- top navigation, after the Stitch design -----------------------
-      // Two rows: a bar with the product name, the live chips and the two run
-      // actions, then a tab strip whose active tab follows the view. The tabs
-      // are navigational lies in two places (detail and plan are per-case pages
-      // reached by opening a case), and the design says to show them anyway —
-      // a disabled tab tells the reader the page exists and what it costs.
+      // One row of identity and actions, then the project line. The three tabs
+      // that used to sit under it were not three places: "cases" was the project
+      // and the other two were halves of a case you had to open first, so two of
+      // the three did nothing until you had picked something they could show. A
+      // project is one page; a case is the thing with two halves, and its switch
+      // lives on the case (see the breadcrumb below).
       const firstTarget = (registry.targets && registry.targets[0]) || null
       const originLabel = project
         ? project.baseUrl || (firstTarget && firstTarget.baseUrl) || ''
         : (firstTarget && firstTarget.baseUrl) || ''
       const targetName = firstTarget ? firstTarget.name : ''
-      const navTabs = [
-        { key: 'cases', label: t('nav.tab.cases'), on: view === 'cases' && !!project },
-        { key: 'detail', label: t('nav.tab.detail'), on: view === 'detail' },
-        { key: 'plan', label: t('nav.tab.plan'), on: view === 'plan' },
-      ]
+      // The case the project line is about, if any. The plan editor can be open
+      // without a case having a file yet (a generated draft), so the id falls
+      // back through definition, then file, then empty — an empty label is not
+      // printed, because "project / " tells the reader nothing.
+      const caseLabel =
+        view === 'cases'
+          ? ''
+          : (selected && selected.definition && selected.definition.caseId) || (selected && selected.file) || ''
       const caseCount = project ? (project.cases || []).length : projects.reduce((sum, item) => sum + (item.counts ? item.counts.total : 0), 0)
       const header = h(
         'header',
@@ -3304,39 +3311,11 @@ window.__ModuleLoader__.load({
                 ),
               ],
         ),
-        // The tab row and the suite indicator only mean something once a project
-        // is open: on the landing page they are chrome without content, which is
-        // what the reader asked to see removed.
-        project
-          ? h(
-              'nav',
-              { className: 'e2e-topnav-tabs' },
-              navTabs.map((tab) =>
-                tab.on
-                  ? h('button', { key: tab.key, type: 'button', className: 'e2e-topnav-tab is-active' }, tab.label)
-                  : h(
-                      'button',
-                      {
-                        key: tab.key,
-                        type: 'button',
-                        className: 'e2e-topnav-tab',
-                        onClick: () => {
-                          if (tab.key === 'cases') {
-                            if (project) setView('cases')
-                            else setOpenProject(null)
-                          }
-                        },
-                      },
-                      tab.label,
-                    ),
-              ),
-              h('div', { className: 'e2e-spacer' }),
-              h('span', { className: 'e2e-topnav-suite' }, t('label.suite'), ': ', project.name),
-            )
-          : null,
-        // The breadcrumb says where in the project you are, and carries the "new
-        // case" button. The way back out is the top bar's button, not a second
-        // copy of it here — one control per intention.
+        // The project line: where in the project you are, the two halves of the
+        // open case, and the way to make another one. The project name is the way
+        // back to its list. A case adds its id and the Evidence / Test-plan
+        // switch — and the switch appears only once a case is open, which is the
+        // honest order: there is nothing to show before that.
         project
           ? h(
               'div',
@@ -3348,27 +3327,38 @@ window.__ModuleLoader__.load({
                     { type: 'button', className: 'e2e-crumb', onClick: () => setView('cases') },
                     project.name,
                   ),
-              view === 'plan'
-                ? h(
-                    'span',
-                    null,
-                    h('span', { className: 'e2e-crumb-sep' }, '/'),
-                    h('span', { className: 'e2e-crumb-current' }, t('action.editTestPlan')),
-                  )
+              caseLabel
+                ? [
+                    h('span', { key: 'sep', className: 'e2e-crumb-sep' }, '/'),
+                    h('span', { key: 'case', className: 'e2e-crumb-current' }, caseLabel),
+                  ]
                 : null,
-              view === 'detail'
+              view !== 'cases' && selected
                 ? h(
-                    'span',
-                    null,
-                    h('span', { className: 'e2e-crumb-sep' }, '/'),
+                    'div',
+                    { className: 'e2e-case-switch' },
                     h(
-                      'span',
-                      { className: 'e2e-crumb-current' },
-                      (selected && selected.definition && selected.definition.caseId) || (selected && selected.file) || '',
+                      'button',
+                      {
+                        type: 'button',
+                        className: `e2e-case-switch-btn${view === 'detail' ? ' is-active' : ''}`,
+                        onClick: () => setView('detail'),
+                      },
+                      t('label.caseView.evidence'),
+                    ),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: `e2e-case-switch-btn${view === 'plan' ? ' is-active' : ''}`,
+                        onClick: () => setView('plan'),
+                      },
+                      t('label.caseView.plan'),
                     ),
                   )
                 : null,
               h('div', { className: 'e2e-spacer' }),
+              h('span', { className: 'e2e-topnav-suite' }, t('label.suite'), ': ', project.name),
               h(
                 Btn,
                 {
@@ -3870,8 +3860,10 @@ window.__ModuleLoader__.load({
 .e2e-header { display: flex; align-items: flex-start; gap: 10px; }
 .e2e-header-text { min-width: 0; }
 /* ---- top navigation, after the Stitch design ---------------------------- */
-/* Two rows. The first is identity + live chips + run actions; the second is
-   the tab strip. 1px borders instead of shadows, per the design system. */
+/* One bar of identity + live chips + run actions, then the project line. There
+   is no tab strip: the project is one page, and a case carries its own Evidence
+   / Test-plan switch in the line below. 1px borders instead of shadows, per the
+   design system. */
 .e2e-topnav { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); overflow: hidden; /* The header keeps its height: a long page below must squeeze the page's own scroll area, not the navigation the reader needs to leave it. */ flex: 0 0 auto; }
 .e2e-topnav-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
 .e2e-topnav-logo { color: var(--dsw-alias-brand-primary); font-size: 15px; }
@@ -3888,29 +3880,31 @@ window.__ModuleLoader__.load({
   padding: 2px 8px;
   white-space: nowrap;
 }
-.e2e-topnav-tabs {
+.e2e-case-switch {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 8px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  margin-left: 6px;
+  padding: 1px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
   background: var(--dsw-alias-bg-base);
 }
-.e2e-topnav-tab {
+.e2e-case-switch-btn {
   appearance: none;
   border: 0;
-  border-bottom: 2px solid transparent;
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12.5px;
-  padding: 8px 12px 7px;
+  font-size: 11.5px;
+  padding: 2px 9px;
+  border-radius: 5px;
   cursor: pointer;
 }
-.e2e-topnav-tab:hover { color: var(--dsw-alias-label-primary); }
-.e2e-topnav-tab.is-active {
+.e2e-case-switch-btn:hover { color: var(--dsw-alias-label-primary); }
+.e2e-case-switch-btn.is-active {
   color: var(--dsw-alias-brand-primary);
-  border-bottom-color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);
   font-weight: 600;
 }
 .e2e-topnav-suite {

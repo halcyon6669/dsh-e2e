@@ -945,6 +945,42 @@ await test('a report without snapshots still shows the rows it read', async () =
   assert.doesNotMatch(text, /read no database rows/, 'it does not claim there were none')
 })
 
+await test('a case carries its own two halves, and the project carries no tabs', async () => {
+  const detail = await settle(() => mainComponent({}))
+  // Three tabs could not be three places: "cases" was the project and the other
+  // two were halves of a case, so two of them were unpressed buttons claiming to
+  // be pages. The switch lives on the case now, and the project line shows it.
+  assert.equal(
+    elementsOf(detail).filter((node) => node.props && /e2e-topnav-tab/.test(String(node.props.className || ''))).length,
+    0,
+    'the top bar must not offer project tabs',
+  )
+  const switched = elementsOf(detail).filter(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-case-switch-btn'),
+  )
+  assert.deepEqual(switched.map((node) => textOf(node)), ['Evidence', 'Test plan'], 'both halves are offered')
+  assert.ok(
+    String(switched[0].props.className).includes('is-active'),
+    'the half being shown is the one marked active',
+  )
+  // The switch really moves: the plan page has the Form / YAML modes, the
+  // evidence page does not.
+  const planHalf = switched.find((node) => /Test plan/.test(textOf(node)))
+  planHalf.props.onClick()
+  const inPlan = await settle(() => mainComponent({}))
+  assert.match(textOf(inPlan), /Form/, 'the plan half is the editor')
+  const backToEvidence = elementsOf(inPlan).find(
+    (node) =>
+      node.props &&
+      String(node.props.className || '').split(' ').includes('e2e-case-switch-btn') &&
+      /Evidence/.test(textOf(node)),
+  )
+  assert.ok(backToEvidence, 'evidence stays reachable from the plan half')
+  backToEvidence.props.onClick()
+  const inEvidence = await settle(() => mainComponent({}))
+  assert.match(textOf(inEvidence), /Test case · REG-001/, 'and the evidence half is the case')
+})
+
 await test('pressing Edit is what opens the editor', async () => {
   const detail = await settle(() => mainComponent({}))
   const edit = elementsOf(detail).find(
@@ -957,7 +993,9 @@ await test('pressing Edit is what opens the editor', async () => {
   edit.props.onClick()
   const opened = await settle(() => mainComponent({}))
   const text = textOf(opened)
-  assert.match(text, /Edit test plan/, 'the editor names itself')
+  // The plan no longer has a tab of its own to name it: the case's switch does,
+  // and the switch is the thing that says which half of the case you are in.
+  assert.match(text, /Test plan/, 'the test plan names itself, through the case switch')
   assert.match(text, /Form/, 'the form view is offered')
   assert.match(text, /YAML/, 'so is the YAML view')
   assert.match(text, /REG-001/, 'the open case is named')
