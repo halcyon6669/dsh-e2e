@@ -244,6 +244,12 @@ window.__ModuleLoader__.load({
         'action.runFullRegression': 'Run full regression',
         'action.refreshScan': 'Refresh scan',
         'action.createProject': 'Create project',
+        'action.editProjects': 'Edit',
+        'action.doneEditing': 'Done',
+        'action.deleteSelected': 'Delete selected ({count})',
+        'notice.projectsDeleted': '{count} project(s) deleted.',
+        'notice.projectsPartlyDeleted': '{done} deleted, {failed} failed: {errors}',
+        'label.pickProjects': 'Pick this project',
         'action.create': 'Create',
         'action.creating': 'Creating…',
         'notice.projectCreated': 'Project {name} created. Base URL {baseUrl} was read from the project; cases live in {dir}.',
@@ -492,6 +498,12 @@ window.__ModuleLoader__.load({
         'action.runFullRegression': '执行全量回归',
         'action.refreshScan': '刷新扫描',
         'action.createProject': '创建项目',
+        'action.editProjects': '编辑',
+        'action.doneEditing': '完成',
+        'action.deleteSelected': '删除所选（{count}）',
+        'notice.projectsDeleted': '已删除 {count} 个项目。',
+        'notice.projectsPartlyDeleted': '已删除 {done} 个，{failed} 个失败：{errors}',
+        'label.pickProjects': '选中这个项目',
         'action.create': '创建',
         'action.creating': '创建中…',
         'notice.projectCreated': '项目 {name} 已创建。Base URL（{baseUrl}）是从项目里读出来的；用例放在 {dir}。',
@@ -681,7 +693,7 @@ window.__ModuleLoader__.load({
      * the percentages are derived from counts the Host already computed, so the
      * page and the agent can never disagree about them.
      */
-    function ProjectTable({ t, projects, onOpen, onDelete, pendingDelete, creator }) {
+    function ProjectTable({ t, projects, onOpen, onDelete, pendingDelete, creator, editing, picked, onPick }) {
       if (!projects || projects.length === 0) {
         return h('div', { className: 'e2e-empty-box' }, t('empty.noProjects'))
       }
@@ -700,13 +712,22 @@ window.__ModuleLoader__.load({
           // card, wrapped together in a positioned cell.
           return h(
             'div',
-            { key: project.key, className: 'e2e-project-cell' },
+            { key: project.key, className: `e2e-project-cell${editing && picked.has(project.key) ? ' is-picked' : ''}` },
+            editing
+              ? h('input', {
+                  type: 'checkbox',
+                  className: 'e2e-project-pick',
+                  'aria-label': `${t('label.pickProjects')}: ${project.name}`,
+                  checked: picked.has(project.key),
+                  onChange: () => onPick(project.key),
+                })
+              : null,
             h(
               'button',
               {
                 type: 'button',
                 className: 'e2e-project-card',
-                onClick: () => onOpen(project),
+                onClick: () => (editing ? onPick(project.key) : onOpen(project)),
                 title: `${t('action.openProject')} — ${project.projectPath || project.baseUrl || project.key}`,
               },
               h(
@@ -768,6 +789,7 @@ window.__ModuleLoader__.load({
                   event.stopPropagation()
                   onDelete(project)
                 },
+                style: editing ? { display: 'none' } : undefined,
               },
               armed ? t('label.deleteProjectConfirm') : '×',
             ),
@@ -2944,6 +2966,45 @@ window.__ModuleLoader__.load({
         }
       }
 
+      // Edit mode turns the landing page into a picker: cards select instead of
+      // open, and the header offers one delete for everything picked. The
+      // checkboxes are the confirmation — a card that was explicitly ticked does
+      // not need a second "are you sure" on top — but the exit is always one
+      // click away, and leaving edit mode drops the selection.
+      const [editingProjects, setEditingProjects] = React.useState(false)
+      const [pickedProjects, setPickedProjects] = React.useState(() => new Set())
+      const togglePicked = (key) =>
+        setPickedProjects((current) => {
+          const next = new Set(current)
+          if (next.has(key)) next.delete(key)
+          else next.add(key)
+          return next
+        })
+      const leaveEditMode = () => {
+        setEditingProjects(false)
+        setPickedProjects(new Set())
+      }
+      const deletePicked = async () => {
+        const targets = projects.filter((item) => pickedProjects.has(item.key))
+        if (targets.length === 0) return
+        setBusy('delete-picked')
+        const errors = []
+        let done = 0
+        for (const target of targets) {
+          try {
+            await apiDelete(`/project?name=${q(target.name)}`)
+            done += 1
+          } catch (error) {
+            errors.push(`${target.name}: ${error.message}`)
+          }
+        }
+        setBusy(null)
+        if (errors.length === 0) setNotice({ message: t('notice.projectsDeleted', { count: done }) })
+        else setNotice({ isError: true, message: t('notice.projectsPartlyDeleted', { done, failed: errors.length, errors: errors.join('; ') }) })
+        leaveEditMode()
+        await refresh()
+      }
+
       // Poll a live batch the same way a single run is polled: the Host owns the
       // loop, so closing the page does not stop the run.
       const batchId = batch && batch.id
@@ -3015,6 +3076,18 @@ window.__ModuleLoader__.load({
           targetName ? h('span', { className: 'e2e-topnav-chip' }, t('label.env'), ': ', targetName) : null,
           h('div', { className: 'e2e-spacer' }),
           h(Btn, { small: true, onClick: refresh }, t('action.refresh')),
+          !project
+            ? h(
+                Btn,
+                {
+                  key: 'edit',
+                  small: true,
+                  variant: editingProjects ? 'danger' : 'default',
+                  onClick: () => (editingProjects ? leaveEditMode() : setEditingProjects(true)),
+                },
+                editingProjects ? t('action.doneEditing') : t('action.editProjects'),
+              )
+            : null,
           project
             ? [
                 h(
@@ -3040,11 +3113,31 @@ window.__ModuleLoader__.load({
                   t('action.runFullRegression'),
                 ),
               ]
-            : h(
-                Btn,
-                { key: 'create', small: true, primary: true, onClick: () => setCreating((current) => (current === 'project' ? '' : 'project')) },
-                t('action.createProject'),
-              ),
+            : [
+                editingProjects
+                  ? h(
+                      Btn,
+                      {
+                        key: 'delete-picked',
+                        small: true,
+                        variant: 'danger',
+                        disabled: busy !== null || pickedProjects.size === 0,
+                        onClick: deletePicked,
+                      },
+                      t('action.deleteSelected', { count: pickedProjects.size }),
+                    )
+                  : null,
+                h(
+                  Btn,
+                  {
+                    key: 'create',
+                    small: true,
+                    primary: true,
+                    onClick: () => setCreating((current) => (current === 'project' ? '' : 'project')),
+                  },
+                  t('action.createProject'),
+                ),
+              ],
         ),
         // The tab row and the suite indicator only mean something once a project
         // is open: on the landing page they are chrome without content, which is
@@ -3527,6 +3620,9 @@ window.__ModuleLoader__.load({
               creator: projectData.creator,
               onDelete: deleteProject,
               pendingDelete: projectPendingDelete,
+              editing: editingProjects,
+              picked: pickedProjects,
+              onPick: togglePicked,
               onOpen: (next) => {
                 setOpenProject(next)
                 setSelected(null)
@@ -3720,6 +3816,22 @@ window.__ModuleLoader__.load({
   gap: 12px;
 }
 .e2e-project-cell { position: relative; }
+/* Edit mode: the checkbox replaces the hover-only × so a touch or a keyboard
+   can pick a card too, and the picked cell says so with the danger tint. */
+.e2e-project-pick {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--dsw-alias-state-error-primary);
+  cursor: pointer;
+}
+.e2e-project-cell.is-picked .e2e-project-card {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, transparent);
+}
 .e2e-project-delete {
   position: absolute;
   top: 6px;
