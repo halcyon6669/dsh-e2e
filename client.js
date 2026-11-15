@@ -150,7 +150,7 @@ window.__ModuleLoader__.load({
         'label.notRun': 'Not run',
         'label.type.unknown': 'Unknown',
         'action.openProject': 'Open',
-        'action.backToProjects': 'All projects',
+        'action.home': 'Back to home',
         'empty.noProjects': 'No projects yet. A project appears here once a case names a target, or a case directory has a case in it.',
         'time.justNow': 'just now',
         'time.minutesAgo': '{count}m ago',
@@ -426,7 +426,7 @@ window.__ModuleLoader__.load({
         'label.notRun': '未运行',
         'label.type.unknown': '未知',
         'action.openProject': '打开',
-        'action.backToProjects': '全部项目',
+        'action.home': '返回首页',
         'empty.noProjects': '还没有项目。用例引用了 target，或者某个用例目录里有用例，项目就会出现在这里。',
         'time.justNow': '刚刚',
         'time.minutesAgo': '{count} 分钟前',
@@ -3248,6 +3248,10 @@ window.__ModuleLoader__.load({
               : { name: settingsDatabase, from: '' }
           }
           const result = await apiPost('/settings', payload)
+          // The sheet closes on success: it exists to answer a question, and the
+          // answer is now in the registry. The notice says so, and the page below
+          // is already showing the new state.
+          setSettingsOpen(false)
           setSettingsState({ status: 'ready', data: result.settings, error: null })
           setNotice({ message: t('notice.settingsSaved') })
           await refresh()
@@ -3547,15 +3551,17 @@ window.__ModuleLoader__.load({
           // The way out of a project sits where every other page-level action
           // sits, in the bar at the top, rather than in a breadcrumb a reader has
           // to notice. A project is a place you can be lost in; leaving it should
-          // not need hunting.
+          // not need hunting. It goes home, and says so: "all projects" named a
+          // list that is not on the page, while home is where the reader lands.
           project
-            ? h(Btn, { key: 'back', small: true, onClick: () => setOpenProject(null) }, t('action.backToProjects'))
+            ? h(Btn, { key: 'back', small: true, onClick: () => setOpenProject(null) }, t('action.home'))
             : null,
           h(Btn, { small: true, onClick: refresh }, t('action.refresh')),
-          // Where the registry is pointed at things — a database, an IDE run
-          // configuration — is one sheet, because those answers arrive from two
-          // catalogs and a reader looking for one of them is looking for both.
-          h(Btn, { small: true, onClick: openSettings }, t('action.settings')),
+          // The settings are the open project's settings: which database entry
+          // it names, which IDE run configuration starts it. On the landing page
+          // there is no project, so there is nothing for the sheet to point at —
+          // an entry point there would open on some other project's answers.
+          project ? h(Btn, { small: true, onClick: openSettings }, t('action.settings')) : null,
           !project
             ? h(
                 Btn,

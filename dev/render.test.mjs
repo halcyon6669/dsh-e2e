@@ -743,6 +743,18 @@ await test('the table and the case list come from one round trip', () => {
   assert.ok(requested.includes('/projects'))
 })
 
+// Settings answer questions about a project — which database entry it names,
+// which IDE run configuration starts it. There is no project on the landing
+// page, so the entry point must not be there either; a sheet that opened on
+// some other project's answers would be worse than no sheet.
+await test('the landing page has no settings of its own', () => {
+  const buttons = elementsOf(landing).filter(
+    (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')),
+  )
+  const names = buttons.map((node) => textOf(node).trim())
+  assert.equal(names.includes('Settings'), false, `the landing page offered settings: ${names.join(', ')}`)
+})
+
 const row = elementsOf(landing).find((node) => node.props && node.props.className === 'e2e-project-card' && node.props.onClick)
 
 await test('clicking a project row opens that project', async () => {
@@ -750,7 +762,7 @@ await test('clicking a project row opens that project', async () => {
   row.props.onClick()
   const opened = await settle(() => mainComponent({}))
   const text = textOf(opened)
-  assert.match(text, /All projects/, 'the breadcrumb should offer a way back')
+  assert.match(text, /Back to home/, 'the top bar should offer a way back')
   assert.match(text, /Record/, 'the open project is named in the header')
   assert.match(text, /REG-001/, 'its cases are listed')
   assert.match(text, /REG-002/)
@@ -763,9 +775,9 @@ await test('the top bar is where you leave a project, and it really leaves', asy
       node.props &&
       typeof node.props.className === 'string' &&
       /\be2e-btn\b/.test(node.props.className) &&
-      /All projects/.test(textOf(node)),
+      /Back to home/.test(textOf(node)),
   )
-  assert.ok(back, 'the top bar should carry the way back to all projects')
+  assert.ok(back, 'the top bar should carry the way back home')
   assert.equal(typeof back.props.onClick, 'function', 'a button that cannot be pressed is a label')
   back.props.onClick()
   const landingAgain = await settle(() => mainComponent({}))
@@ -1270,15 +1282,15 @@ async function openDetail() {
       return settle(() => mainComponent({}))
     }
     // Whatever page the previous test left open, there is exactly one control
-    // that means "I am done here": the All-projects crumb (a crumb, not a btn),
-    // or Done in the editor. On the landing page there is none of those —
-    // getting back into a project is done with its card.
+    // that means "I am done here": the back-to-home button in the top bar, or
+    // Done in the editor. On the landing page there is none of those — getting
+    // back into a project is done with its card.
     const leave =
       elementsOf(tree).find(
         (node) =>
           node.props &&
           ['e2e-btn', 'e2e-crumb'].some((name) => String(node.props.className || '').split(' ').includes(name)) &&
-          /^(All projects|Done)$/.test(textOf(node).trim()),
+          /^(Back to home|Done)$/.test(textOf(node).trim()),
       ) ||
       elementsOf(tree).find((node) => node.props && node.props.className === 'e2e-project-card' && node.props.onClick)
     assert.ok(leave, `expected a control that returns to the case list; page was: ${textOf(tree).replace(/\s+/g, ' ').slice(0, 300)}`)
