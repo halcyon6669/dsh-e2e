@@ -278,6 +278,17 @@ const PAST_REPORT = {
     caseId: 'REG-001',
     verdict: 'passed',
     durationMs: 1234,
+    traceId: 'trace-abc123',
+    fatal: null,
+    // The detail page reads these to fill the verdict card and the teardown
+    // strip. A green run that leaked a service on port 8443 is not a green run,
+    // so the strip is part of the page rather than a detail of the report.
+    environment: {
+      target: 'record-local',
+      baseUrl: 'http://localhost:8080',
+      configurationName: 'RecordApplication',
+    },
+    teardown: { sql: [{ sql: 'DELETE FROM users' }], mocks: [], service: { port: 8080, stopped: true }, errors: [] },
     checks: [{ ok: true, label: 'response.status is 200' }],
     steps: [{ at: 0, name: 'request' }],
     evidence: {
@@ -813,6 +824,132 @@ await test('every group offers to add a test to itself', async () => {
   const adds = elementsOf(opened).filter((node) => node.props && node.props.className === 'e2e-add-test')
   assert.equal(adds.length, 1, 'one button per group')
   assert.match(textOf(adds[0]), /Add test/)
+})
+
+/* ---- the detail page: verdict card, tab strip, inspection rail ---- */
+
+/**
+ * Walks back to the case list and opens the first case.
+ *
+ * The earlier tests leave the panel somewhere else (the plan editor, mostly),
+ * and these ones are about the detail page, so they have to arrive there the
+ * way a person does: press the way back, then the row.
+ */
+async function openDetail() {
+  let tree = await settle(() => mainComponent({}))
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const row = elementsOf(tree).find(
+      (node) => node.props && node.props.className === 'e2e-case-row' && textOf(node).includes('REG-001'),
+    )
+    if (row) {
+      row.props.onClick()
+      return settle(() => mainComponent({}))
+    }
+    // Whatever page the previous test left open, there is exactly one control
+    // that means "I am done here": Back in the detail page, Done in the editor.
+    const leave = elementsOf(tree).find(
+      (node) =>
+        node.props &&
+        String(node.props.className || '').split(' ').includes('e2e-btn') &&
+        /^(Back to test cases|Done)$/.test(textOf(node).trim()),
+    )
+    assert.ok(leave, 'expected a control that returns to the case list')
+    leave.props.onClick()
+    tree = await settle(() => mainComponent({}))
+  }
+  assert.fail('could not reach the case list')
+}
+
+/** Presses one tab of the detail page and renders the result. */
+async function showTab(tree, matcher) {
+  const tab = elementsOf(tree).find(
+    (node) =>
+      node.props && String(node.props.className || '').split(' ').includes('e2e-mode-btn') && matcher.test(textOf(node)),
+  )
+  assert.ok(tab, `no tab matching ${matcher}`)
+  tab.props.onClick()
+  return settle(() => mainComponent({}))
+}
+
+// The verdict card is the answer to "should I keep reading", so the three
+// numbers it carries have to be numbers, not a sentence to be parsed.
+await test('the verdict card puts the count next to the word', async () => {
+  const opened = await openDetail()
+  const metrics = elementsOf(opened).filter((node) =>
+    node.props ? String(node.props.className || '').split(' ').includes('e2e-metric') : false,
+  )
+  assert.equal(metrics.length, 3, 'checks, duration and the fatal boundary')
+  const text = textOf(opened)
+  assert.match(text, /1\/1/, 'the checks passed, as a fraction') // one check in the fixture
+  assert.match(text, /1234 ms/, 'the duration, in the unit it was measured in')
+  assert.match(text, /Strict verdict/, 'the verdict says what kind of verdict it is')
+})
+
+// A green run that leaked a service is not a green run. Teardown belongs on the
+// page, not three clicks into the report.
+await test('the teardown strip is on the page, not in the report', async () => {
+  const opened = await openDetail()
+  const text = textOf(opened)
+  assert.match(text, /Teardown/, 'the strip has a heading word')
+  assert.match(text, /clean/, 'nothing went wrong, and it says so')
+  assert.match(text, /trace-abc123/, 'the trace id, so a log search is possible')
+})
+
+// The rail is the point of this layout: what went over the wire is visible
+// while you read a checkpoint, not behind a tab you have to remember to open.
+await test('the wire and the log tail stay visible whatever tab you are on', async () => {
+  const opened = await openDetail()
+  const rail = elementsOf(opened).find((node) => node.props && node.props.className === 'e2e-rail')
+  assert.ok(rail, 'the inspection rail is rendered')
+  const railText = textOf(rail)
+  assert.match(railText, /POST/, 'the method badge')
+  assert.match(railText, /localhost:8080\/auth\/register/, 'the URL that was called')
+  assert.match(railText, /200/, 'the status that came back')
+  assert.match(railText, /WARN slow query/, 'the last lines of the console')
+  // And it is still there after switching tabs, which is the whole claim.
+  const codeTab = elementsOf(opened).find(
+    (node) =>
+      node.props && String(node.props.className || '').split(' ').includes('e2e-mode-btn') && /Code/.test(textOf(node)),
+  )
+  assert.ok(codeTab, 'the code tab exists')
+  codeTab.props.onClick()
+  const afterSwitch = await settle(() => mainComponent({}))
+  const railAgain = elementsOf(afterSwitch).find((node) => node.props && node.props.className === 'e2e-rail')
+  assert.match(textOf(railAgain), /localhost:8080\/auth\/register/, 'the rail does not change with the tab')
+})
+
+// A checkpoint row has to be quotable: "number 1 failed" is how people talk
+// about a run, and the status word lines up so the column can be scanned.
+await test('a checkpoint row can be pointed at, by number and by word', async () => {
+  const opened = await showTab(await openDetail(), /Checkpoints/)
+  const rows = elementsOf(opened).filter((node) =>
+    node.props ? String(node.props.className || '').split(' ').includes('e2e-check') : false,
+  )
+  assert.equal(rows.length, 1, 'one row per check in the fixture')
+  const rowText = textOf(rows[0])
+  // `textOf` concatenates without separators, so the mark and the number touch.
+  assert.match(rowText, /1\. response\.status is 200/, 'rows are numbered from one')
+  assert.match(rowText, /PASSED/, 'the verdict word is on the row, in one vocabulary')
+})
+
+// A failed row is tinted, because on a page of greens the red line has to find
+// the reader rather than the other way round.
+await test('a failed checkpoint is tinted, and says FAILED', async () => {
+  PAST_REPORT.report.verdict = 'failed'
+  PAST_REPORT.report.checks = [{ ok: false, label: 'response.body contains', expected: 'token', actual: 'nope' }]
+  try {
+    const opened = await showTab(await openDetail(), /Checkpoints/)
+    const row = elementsOf(opened).find((node) =>
+      node.props ? String(node.props.className || '').split(' ').includes('e2e-check') : false,
+    )
+    assert.ok(row, 'the failed check is rendered')
+    assert.match(String(row.props.className), /is-failed/, 'the row carries the failed modifier')
+    assert.match(textOf(row), /FAILED/, 'and the word')
+    assert.match(textOf(row), /expected token/, 'the expectation is quoted verbatim')
+  } finally {
+    PAST_REPORT.report.verdict = 'passed'
+    PAST_REPORT.report.checks = [{ ok: true, label: 'response.status is 200' }]
+  }
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

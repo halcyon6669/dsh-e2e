@@ -120,34 +120,34 @@
 
 | 文件 | 行数 | 职责 | 关键设计决策 |
 |---|---|---|---|
-| `index.js` | 150 | 插件入口，`apply(ctx, config)` | 模块解析钩子给整棵依赖图加 generation，改任何 `src/*.js` 都不必重启 DSH |
-| `client.js` | 3599 | 浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划 + 侧栏入口 | 纯手写 bundle，React 来自宿主模块表，见 §16 |
-| `src/host.js` | 347 | 组装、示例播种、`/status`、客户端半自检 | 面板首次打开不能是空目录，见 §16.1 |
-| `src/panel.js` | 993 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
-| `src/store.js` | 321 | 用例与报告的唯一磁盘入口 | 路径必须落在 root 内，见 §16.2 |
-| `src/projects.js` | 397 | 项目表：按 origin 归并 target、汇总最近结果与分组 | 不存储、只推导；见 §5.10 |
-| `src/plan.js` | 155 | 步骤描述、状态判定、组内结论 | 纯函数，Host 算一次浏览器不重算；见 §5.11 |
-| `src/edit.js` | 252 | 表单 → YAML 的行级补丁 | 不重新序列化，见 §5.12 |
-| `src/ai.js` | 309 | 生成用例、解释失败 | 模型永不参与判定，见 §16.4 |
-| `src/scan.js` | 538 | 读 Spring 源码：端点、DTO 约束、实体表名 | 只读，注解解析不引依赖，见 §16.5 |
-| `src/scaffold.js` | 293 | 端点 → 用例骨架 | 只生成骨架不猜断言，见 §16.5 |
-| `src/tools.js` | 524 | 注册 7 个工具 | 与面板共用 store，不重复实现 |
-| `src/case.js` | 850 | YAML 解析与规范化 | 未知字段直接报错（见 §5.4） |
-| `src/registry.js` | 388 | target / 数据库注册表 | 支持 `from: db-mcp` 复用已存数据源，见 §5.7 |
-| `src/resolve.js` | 157 | 用例 + registry → 实际连接 | 三层合并，缺配置时列出可用名字 |
-| `src/guard.js` | 219 | 环境护栏 | 校验解析后的地址（见 §9） |
-| `src/runner.js` | 729 | 流水线编排 | `finally` 保证 teardown 与停服 |
-| `src/browser.js` | 538 | CDP 客户端：起 Chrome、按步骤操作、截图 | 零依赖 WebSocket，见 §5.16 |
-| `src/service.js` | 270 | 启停服务、跟随日志 | 端口占用预检（见 §6.2） |
-| `src/idea.js` | 274 | IDEA MCP 客户端 | 手写 SSE + JSON-RPC，不引依赖 |
-| `src/http.js` | 136 | HTTP 客户端 | 用 `node:http` 而非 `fetch`（见 §4.2） |
-| `src/pg.js` | 454 | PostgreSQL 线协议 | 手写，含 SCRAM-SHA-256（见 §4.2） |
-| `src/db.js` | 148 | 数据库门面 | 强制只读断言 |
-| `src/assert.js` | 253 | 断言引擎 | 每条断言返回统一结构（见 §7.2） |
-| `src/report.js` | 383 | 报告渲染 | 双格式：JSON + Markdown |
-| `src/yaml.js` + `vendor/js-yaml.mjs` | 134 + 104KB | YAML 解析与输出 | 内置 vendor；不信任 `import.meta.url`（见 §11.18） |
+| `index.js` | 151 | 插件入口，`apply(ctx, config)` | 模块解析钩子给整棵依赖图加 generation，改任何 `src/*.js` 都不必重启 DSH |
+| `client.js` | 4187 | 浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划 + 侧栏入口 | 纯手写 bundle，React 来自宿主模块表，主题只用 `--dsw-alias-*`，见 §16 |
+| `src/host.js` | 348 | 组装、示例播种、`/status`、客户端半自检 | 面板首次打开不能是空目录，见 §16.1 |
+| `src/panel.js` | 994 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
+| `src/store.js` | 322 | 用例与报告的唯一磁盘入口 | 路径必须落在 root 内，见 §16.2 |
+| `src/projects.js` | 398 | 项目表：按 origin 归并 target、汇总最近结果与分组 | 不存储、只推导；见 §5.10 |
+| `src/plan.js` | 156 | 步骤描述、状态判定、组内结论 | 纯函数，Host 算一次浏览器不重算；见 §5.11 |
+| `src/edit.js` | 253 | 表单 → YAML 的行级补丁 | 不重新序列化，见 §5.12 |
+| `src/ai.js` | 310 | 生成用例、解释失败 | 模型永不参与判定，见 §16.4 |
+| `src/scan.js` | 539 | 读 Spring 源码：端点、DTO 约束、实体表名 | 只读，注解解析不引依赖，见 §16.5 |
+| `src/scaffold.js` | 294 | 端点 → 用例骨架 | 只生成骨架不猜断言，见 §16.5 |
+| `src/tools.js` | 525 | 注册 7 个工具 | 与面板共用 store，不重复实现 |
+| `src/case.js` | 851 | YAML 解析与规范化 | 未知字段直接报错（见 §5.4） |
+| `src/registry.js` | 389 | target / 数据库注册表 | 支持 `from: db-mcp` 复用已存数据源，见 §5.7 |
+| `src/resolve.js` | 158 | 用例 + registry → 实际连接 | 三层合并，缺配置时列出可用名字 |
+| `src/guard.js` | 220 | 环境护栏 | 校验解析后的地址（见 §9） |
+| `src/runner.js` | 730 | 流水线编排 | `finally` 保证 teardown 与停服 |
+| `src/browser.js` | 539 | CDP 客户端：起 Chrome、按步骤操作、截图 | 零依赖 WebSocket，见 §5.16 |
+| `src/service.js` | 271 | 启停服务、跟随日志 | 端口占用预检（见 §6.2） |
+| `src/idea.js` | 275 | IDEA MCP 客户端 | 手写 SSE + JSON-RPC，不引依赖 |
+| `src/http.js` | 137 | HTTP 客户端 | 用 `node:http` 而非 `fetch`（见 §4.2） |
+| `src/pg.js` | 455 | PostgreSQL 线协议 | 手写，含 SCRAM-SHA-256（见 §4.2） |
+| `src/db.js` | 149 | 数据库门面 | 强制只读断言 |
+| `src/assert.js` | 254 | 断言引擎 | 每条断言返回统一结构（见 §7.2） |
+| `src/report.js` | 384 | 报告渲染 | 双格式：JSON + Markdown |
+| `src/yaml.js` + `vendor/js-yaml.mjs` | 135 + 104KB | YAML 解析与输出 | 内置 vendor；不信任 `import.meta.url`（见 §11.18） |
 
-合计 **12,811 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
+合计约 **13,400 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**（另有 `dev/preview.mjs` 约 780 行 + 十三个探针，都是开发期工具，不进运行时）。
 
 `client.js` 涨得最快，而它没有任何编译期检查：`node --check` 只看语法，看不见一个改了名却没跟着改的变量。这就是 `dev/render.test.mjs` 存在的原因（§17），也是为什么前端每加一个页面都要同时加渲染探针。
 
@@ -709,6 +709,17 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 **断言是有条件的，证据不是。** 第一版只在 `definition.expect.logs` 存在时才去收日志（"没人要的证据何必收"），结果所有没写这个块的用例，控制台页签永久空白——而且空白不区分「这次没打印」和「我们没去看」。现在服务一启动就收，无条件写进 `evidence.logs`；是否参与判定由 `expect.logs` 决定，报告用 `asserted` 字段记下这件事，页签和 Markdown 报告各标一行。等待时长也跟着分：要断言的日志没 flush 会把真断言变成 flaky（`logSettleMs`，默认 800ms），只为留证据时 250ms 就够（`logFlushMs`），不必让每次运行多等半秒。
 
 **缺一半配对时，显示读到的那一半。** 前后对比是后加的功能，早于它的报告没有 `evidence.snapshots`，但 `evidence.database` 里明明有两行终态。第一版数据库页签只认 `snapshots`，于是旧报告上那个页签是空的。现在退回 `DatabaseRows` 并标注「只有请求之后」——用一个假装配对存在、其中一半用空白填满的 `DatabaseDiff` 去渲染，是比只显示一半更安静的谎。
+
+### 5.14.1 详情页重做：判定卡、页签带、常驻证据栏
+
+上面那张表回答的是「每个页签放什么」，没回答「它们怎么摆在一起」。按 `E:\tmp-4-dsh\dsh-e2e\用例详情与证据` 的 DevTools Precision Dark 参考图重做后，页面是四段固定结构：
+
+1. **判定卡（hero）**：`STRICT VERDICT: PASSED` 徽章 + 永久编号 + 运行 ID + 标题/描述 + 六个规格标签（接口、场景、优先级、组、目标、地址）+ 三格指标（检查点通过数、执行耗时、致命边界）。把 `Passed` 和 `7/7` 同时写出来是刻意的：这是同一个事实的两个分辨率，判断「要不要信任这次绿运行」的人两个都要看；句子里的数字会被略过，列里的数字会被读。
+2. **页签带**：六项各带计数，激活项 2px 下边框，高 34px。第一版真图里它被压成 9px（缺 `flex: 0 0 auto`），hero 也被压缩——**只有把页面拍成图才看得见这类错误**，文字探针全部通过。
+3. **左页签内容 + 右常驻证据栏**（12 栏网格的 8/4 分法）：左是六个页签之一的正文；右栏**不管在哪个页签都常驻**，放属性、请求与线网探测（方法/URL/请求头/请求体/状态码/响应体）、控制台尾部、证据文件链接。**理由**：一个 `500` 加 44 字节响应体，比检查点本身更能解释一次失败；把它藏进某个页签，等于要求读者先猜对页签才能看到原因。检查点逐条编号、右侧一个 `PASSED`/`FAILED` 词——「第 4 项检查是失败的那个」是人会说出口的句子。
+4. **页脚审计条**：teardown 是否干净、清理了几条语句、trace id。一个漏了 8443 端口服务的绿运行不是绿运行，而这件事不该只在报告 Markdown 里说。
+
+配色**一个 hex 都不写**：全部用宿主的 `--dsw-alias-*` 变量，深浅由 `body[data-ds-dark-theme]` 切换，透明度用 `color-mix(in srgb, var(--dsw-alias-*) N%, transparent)`。参考图的 `code.html` 用的是写死的 Tailwind 色值（`#0B0F17`、`#10B981`…），直接搬进来会同时违反 §16.7 和 `dev/client.test.mjs` 的静态检查（它从 `const STYLE` 里切 12000 字符，禁止任何 `#[0-9a-fA-F]{3,8}` 与 `rgb(`），而且宿主换主题时面板不会跟着换。
 
 ### 5.15 数据库前后对比：为什么断言要跑两次
 
@@ -1722,6 +1733,25 @@ GET  /plugins/e2e/api/projects  → warnings [], Record {total:3, passed:1, fail
 - `a Windows path yields its directory, not a bogus URL`：裸反斜杠路径必须产出 `file:///C:/pkg/vendor/js-yaml.mjs`。
 
 **这次修复没有真机复现原始故障**，因为线上 Host 一旦 reload 就换成了新代码，而触发条件（loader 用非 `file:` 基址实例化模块）在这台机器上无法稳定制造。已验证的是：修后的代码在所有已知坏基址下都能找到解析器（单测），以及线上面板恢复正常（真机）。原故障的触发路径本身属于 DSH 内部，记录在案而不是猜。
+
+---
+
+### 12.15 详情页重做：用真浏览器看，而不是只断言文字
+
+`dev/render.test.mjs` 能证明「这句话渲染出来了」，证明不了「这一行有 400px 宽」「右栏掉到了折叠线以下」「深色下这行字看不见」。布局改动必须用眼睛看，但「打开应用点三下」不是能反复跑的命令。于是有 `dev/preview.mjs`：用一套最小的 hooks 运行时驱动**真实 factory**，把渲染树序列化成 HTML，再让 `src/browser.js` 起真 Chrome 拍 7 张 1440×900 的图（项目表、用例清单、详情页深/浅两套、详情页的数据库/截图/控制台三个页签）。
+
+主题不是手写的。`dev/theme.css` 是从宿主自己的 `@deepseek-ai/dsh-client-ui-theme/lib/client.js`（asar 内）逐字抄出的 `:root` + `body` + `body[data-ds-dark-theme]` 三段：82 个 static、140 个浅色 alias、139 个深色 alias。`<body data-ds-dark-theme="">` 正是宿主切深色的开关。它是一台机器的快照、故意提交进仓库，因为一个要先写 asar 读取器才能启动的预览，是没有人会重跑的预览；宿主换主题时重新提取一次即可。**`client.js` 绝不读它**——线上 CSS 只用 `var(--dsw-alias-*)`，永远跟宿主当前主题走。预览产物（`dev/preview/*.html` 与 `preview-*.png`）被 `.gitignore` 忽略，它们是这台机器的证据，不是源码。
+
+第一张真图就抓到两个文字探针不可能抓到的错误：
+
+| 现象 | 原因 | 修法 |
+|---|---|---|
+| 页签带被压成约 9px，标签上下被切掉一半 | `.e2e-tabstrip` 缺 flex 约束，在 column 父级里跟着剩余高度走 | `flex: 0 0 auto; min-height: 34px` |
+| 判定卡被压缩成两行 | `.e2e-hero` 同样缺约束 | `flex: 0 0 auto` |
+
+还有一个错误**长得像产品 bug、其实是检查器 bug**：检查点页签全空。第一版预览 harness 和文字探针一样用扁平 `hookStates` 数组 + `serialize`/`findNode` 里保存恢复 `hookIndex`，先看用例清单（`CaseTable` 初始化了 `folded`）、再进详情页（`CaseDetail` 的 `useState('checks')` 读回那个 `{}`），六个 `tab === 'x'` 分支全 false。修法是每个组件实例按它在树里的**身份路径**各持一份 hook frame（`frames: Map<path, slot[]>` + `withFrame(path, fn)`），整棵树每轮只 `expand()` 一次；`findNode`/`serialize` 只走纯元素，绝不再调用一次函数组件。`root` 本身也要放进 `expand`，否则 `MainPanel` 的 hooks 落在全局数组、跨轮漂移。**渲染检查器的 bug 长得和产品的 bug 一模一样，而它更容易被相信**——所以文字探针（`render.test.mjs`）故意不抽公共运行时：harness 的 bug 不该同时打坏检查 harness 的东西。
+
+验收后的真图（都逐张看过）：深浅两套配色正常；7 条编号检查点 + 右侧 `PASSED`；请求/响应/日志 rail 在切到 Code 页签后仍然常驻；数据库页两条 `0 → 1` 四列对比；控制台页 18/214 LINES + 8 行级别着色日志；截图页两张缩略图（fixture 里是外链占位，所以图上显示 alt 文本——这是 fixture 的局限，不是渲染缺陷；真机链路见 §12.12 的 7773 字节 PNG）。
 
 ---
 

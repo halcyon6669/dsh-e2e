@@ -159,15 +159,14 @@ window.__ModuleLoader__.load({
         'label.testName': 'Test name',
         'label.tests': '{count} tests',
         'label.steps': '{count} steps',
+        'label.stepCount': 'Steps',
         'label.group': 'Group',
         'label.noChanges': 'No changes yet',
         'label.mode.form': 'Form',
         'label.mode.yaml': 'YAML',
         'label.mode.code': 'Code',
         'label.testCase': 'Test case',
-        'label.properties': 'Properties',
-        'label.goal': 'Goal',
-        'label.status': 'Status',
+        'label.properties': 'Properties',        'label.status': 'Status',
         'label.mode.history': 'History',
         'label.mode.output': 'Output',
         'label.mode.checks': 'Checkpoints',
@@ -201,6 +200,31 @@ window.__ModuleLoader__.load({
         'label.thisRun': 'This run',
         'label.runAt': 'Ran {when}',
         'label.noHistory': 'No runs on record for this case yet.',
+
+        'label.verdictStrict': 'Strict verdict',
+        'label.permanentRef': 'Permanent ref',
+        'label.runId': 'Run id',
+        'label.checksPassed': 'Checks passed',
+        'label.executionDuration': 'Execution duration',
+        'label.fatalBoundary': 'Fatal boundary',
+        'label.none': 'none',
+        'label.expected': 'expected',
+        'label.actual': 'actual',
+        'label.wireTrace': 'Request and wire trace',
+        'label.logTail': 'Console tail',
+        'label.evidenceFiles': 'Evidence files',
+        'label.reportMd': 'Report',
+        'label.rawLog': 'Server log',
+        'label.noEvidence': 'This run left no files behind.',
+        'label.noRequest': 'This run never got a request out, so there is no wire trace to show.',
+        'label.payload': 'Payload',
+        'label.bodyResponse': 'Body response',
+        'label.lines': 'lines',
+        'label.teardown': 'Teardown',
+        'label.errors': 'error(s)',
+        'label.cleanTeardown': 'clean',
+        'label.statements': 'Statements',
+        'label.trace': 'Trace',
 
         'action.editTestPlan': 'Edit test plan',
         'action.addMoreTests': 'Add more tests',
@@ -374,15 +398,14 @@ window.__ModuleLoader__.load({
         'label.testName': '用例名称',
         'label.tests': '{count} 个用例',
         'label.steps': '{count} 步',
+        'label.stepCount': '用例步骤',
         'label.group': '分组',
         'label.noChanges': '还没有改动',
         'label.mode.form': '表单',
         'label.mode.yaml': 'YAML',
         'label.mode.code': '代码',
         'label.testCase': '用例',
-        'label.properties': '属性',
-        'label.goal': '目标',
-        'label.status': '状态',
+        'label.properties': '属性',        'label.status': '状态',
         'label.mode.history': '历史',
         'label.mode.output': '输出',
         'label.mode.checks': '检查点',
@@ -413,6 +436,31 @@ window.__ModuleLoader__.load({
         'label.runAt': '{when} 运行',
         'label.noHistory': '这个用例还没有运行记录。',
         'label.formOnly': '初始化 SQL、变量捕获、清理和 mock 只在 YAML 里改：给它们做表单只会得到一个更难用的文本编辑器。',
+
+        'label.verdictStrict': '严格判定',
+        'label.permanentRef': '永久编号',
+        'label.runId': '运行 ID',
+        'label.checksPassed': '检查点通过',
+        'label.executionDuration': '执行耗时',
+        'label.fatalBoundary': '致命边界',
+        'label.none': '无',
+        'label.expected': '期望',
+        'label.actual': '实际',
+        'label.wireTrace': '请求与线网探测',
+        'label.logTail': '控制台尾部',
+        'label.evidenceFiles': '证据文件',
+        'label.reportMd': '报告',
+        'label.rawLog': '服务日志',
+        'label.noEvidence': '这次运行没有留下文件。',
+        'label.noRequest': '这次运行没有发出请求，所以没有线网探测可看。',
+        'label.payload': '请求体',
+        'label.bodyResponse': '响应体',
+        'label.lines': '行',
+        'label.teardown': '清理',
+        'label.errors': '处错误',
+        'label.cleanTeardown': '干净',
+        'label.statements': '语句',
+        'label.trace': '追踪',
 
         'action.editTestPlan': '编辑测试计划',
         'action.addMoreTests': '添加更多用例',
@@ -1235,46 +1283,270 @@ window.__ModuleLoader__.load({
      * what did it last do, what did it see. Editing is a decision, so it gets its
      * own button.
      */
+    /* ---------- the case detail page ---------- */
+
+    /**
+     * One number with a word under it.
+     *
+     * "Passed" and "7 of 7 checks" are the same fact at two resolutions, and a
+     * reader deciding whether to trust a green run wants both. Numbers buried in a
+     * sentence get skimmed; numbers in a column get read.
+     */
+    function Metric(props) {
+      return h(
+        'div',
+        { className: 'e2e-metric' },
+        h('div', { className: 'e2e-metric-label' }, props.label),
+        h(
+          'div',
+          { className: 'e2e-metric-value', style: props.tone ? { color: props.tone } : undefined },
+          props.value,
+        ),
+        props.note ? h('div', { className: 'e2e-metric-note' }, props.note) : null,
+      )
+    }
+
+    /** `priority: high` — one fact, the key in small caps, the value in mono. */
+    function SpecTag(props) {
+      return h(
+        'span',
+        { className: 'e2e-spec', title: props.title || undefined },
+        h('span', { className: 'e2e-spec-key' }, props.name),
+        h('span', { className: 'e2e-spec-value' }, props.value),
+      )
+    }
+
+    /** A 500 is red, a 404 amber, a 200 green: the colour is the first read. */
+    function responseTone(status) {
+      const code = Number(status)
+      if (code >= 500) return TONES.fail
+      if (code >= 400) return TONES.warn
+      if (code >= 200 && code < 300) return TONES.pass
+      return TONES.idle
+    }
+
+    /** `is-warn` / `is-error` for the log tail, from the level word in the line. */
+    function levelClass(line) {
+      const match = /\b(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\b/.exec(String(line))
+      return match ? ` is-${match[1].toLowerCase()}` : ''
+    }
+
+    /**
+     * What went out and what came back, always on the page.
+     *
+     * This is a rail section rather than a tab because the wire is what every
+     * reader looks at before choosing a tab: a 500 with a 44-byte body explains
+     * more about a failing checkpoint than the checkpoint does.
+     */
+    function WireTrace(props) {
+      const { t, evidence } = props
+      const request = evidence && evidence.request
+      const response = evidence && evidence.response
+      if (!request && !response) return h('div', { className: 'e2e-muted' }, t('label.noRequest'))
+      const entriesOf = (map) => Object.entries(map || {}).slice(0, 6)
+      return h(
+        'div',
+        { className: 'e2e-wire' },
+        request
+          ? h(
+              'div',
+              { className: 'e2e-wire-part' },
+              h(
+                'div',
+                { className: 'e2e-wire-line' },
+                h('span', { className: 'e2e-method-badge' }, String(request.method || 'GET')),
+                h('span', { className: 'e2e-url', title: request.url }, String(request.url || '')),
+              ),
+              entriesOf(request.headers).length > 0
+                ? h(
+                    'div',
+                    { className: 'e2e-kv' },
+                    entriesOf(request.headers).map(([key, value], index) =>
+                      h(
+                        'div',
+                        { key: index, className: 'e2e-kv-row' },
+                        h('span', { className: 'e2e-kv-key' }, key),
+                        h('span', { className: 'e2e-kv-value', title: String(value) }, String(value)),
+                      ),
+                    ),
+                  )
+                : null,
+              request.body === null || request.body === undefined
+                ? null
+                : h(
+                    'div',
+                    null,
+                    h('div', { className: 'e2e-wire-caption' }, t('label.payload')),
+                    h('pre', { className: 'e2e-pre' }, formatBody(request.body, 1200)),
+                  ),
+            )
+          : null,
+        response
+          ? h(
+              'div',
+              { className: 'e2e-wire-part' },
+              h(
+                'div',
+                { className: 'e2e-wire-line' },
+                h('span', { className: 'e2e-status-badge', style: { color: responseTone(response.status) } }, String(response.status)),
+                h('span', { className: 'e2e-wire-caption' }, t('label.status')),
+                h('span', { className: 'e2e-spacer' }),
+                h('span', { className: 'e2e-wire-caption' }, `${response.durationMs || 0} ms`),
+              ),
+              h(
+                'div',
+                null,
+                h('div', { className: 'e2e-wire-caption' }, t('label.bodyResponse')),
+                h('pre', { className: 'e2e-pre' }, formatBody(response.body, 1600)),
+              ),
+            )
+          : null,
+      )
+    }
+
+    /**
+     * The tail of the console, in the rail, where a failing run is read.
+     *
+     * The Console tab is the full dump; this is the twelve lines you see while
+     * reading a checkpoint, without leaving the checkpoint.
+     */
+    function LogTail(props) {
+      const { t, logs } = props
+      if (!logs) return h('div', { className: 'e2e-muted' }, t('label.noLogs'))
+      const lines = (logs.lines || []).slice(-14)
+      return h(
+        'div',
+        null,
+        h('div', { className: 'e2e-wire-caption' }, `${logs.scopedLines}/${logs.totalLines} ${t('label.lines')}`),
+        lines.length > 0
+          ? h(
+              'div',
+              { className: 'e2e-logtail' },
+              lines.map((line, index) => h('div', { key: index, className: `e2e-logline${levelClass(line)}` }, String(line))),
+            )
+          : h('div', { className: 'e2e-muted' }, t('label.noLogs')),
+      )
+    }
+
+    /** The files this run left behind. A report you cannot open is a rumour. */
+    function EvidenceFiles(props) {
+      const { t, run, evidence, shots, onOpenReport } = props
+      const nameOf = (path) => String(path || '').split(/[\\/]/).pop()
+      const items = []
+      if (run && run.path) {
+        items.push({
+          key: 'report',
+          label: t('label.reportMd'),
+          value: nameOf(run.path).replace(/\.json$/i, '.md'),
+          onClick: () => onOpenReport && onOpenReport(run.path),
+        })
+      }
+      if (evidence && evidence.logs && evidence.logs.path) {
+        items.push({ key: 'log', label: t('label.rawLog'), value: nameOf(evidence.logs.path) })
+      }
+      if (shots > 0) items.push({ key: 'shots', label: t('label.mode.shots'), value: String(shots) })
+      if (items.length === 0) return h('div', { className: 'e2e-muted' }, t('label.noEvidence'))
+      return h(
+        'div',
+        { className: 'e2e-links' },
+        items.map((item) =>
+          h(
+            'button',
+            {
+              key: item.key,
+              type: 'button',
+              className: 'e2e-link',
+              disabled: !item.onClick,
+              onClick: item.onClick,
+              title: item.value,
+            },
+            h('span', { className: 'e2e-link-label' }, item.label),
+            h('span', { className: 'e2e-link-value' }, item.value),
+          ),
+        ),
+      )
+    }
+
+    /**
+     * What teardown did.
+     *
+     * A green run that leaked a service on port 8443 is not a green run; the
+     * report already knows, and this strip is where it says so.
+     */
+    function AuditBar(props) {
+      const { t, report, teardown } = props
+      if (!report) return null
+      const errors = (teardown && teardown.errors) || []
+      const statements = (teardown && teardown.sql && teardown.sql.length) || 0
+      return h(
+        'div',
+        { className: 'e2e-audit' },
+        h(
+          'span',
+          { className: `e2e-audit-item${errors.length > 0 ? ' is-bad' : ''}` },
+          h('span', { className: 'e2e-audit-key' }, t('label.teardown')),
+          errors.length > 0 ? `${errors.length} ${t('label.errors')}` : t('label.cleanTeardown'),
+        ),
+        h(
+          'span',
+          { className: 'e2e-audit-item' },
+          h('span', { className: 'e2e-audit-key' }, t('label.statements')),
+          String(statements),
+        ),
+        h(
+          'span',
+          { className: 'e2e-audit-item' },
+          h('span', { className: 'e2e-audit-key' }, t('label.trace')),
+          h('code', { className: 'e2e-code' }, String(report.traceId || '—')),
+        ),
+      )
+    }
+
     function CaseDetail(props) {
-      const {
-        t,
-        selected,
-        history,
-        historyRun,
-        onOpenRun,
-        historyLoading,
-        onEdit,
-        onRun,
-        running,
-        onDone,
-      } = props
+      const { t, selected, history, historyRun, onOpenRun, historyLoading, onEdit, onRun, running, onDone, onOpenReport } =
+        props
       const [tab, setTab] = React.useState('checks')
       const definition = selected ? selected.definition : null
       const latest = (history && history[0]) || null
       // The run the reader is looking at. Opening a case loads its newest report,
-      // so this is almost always set — the tabs would otherwise all be empty on a
-      // case that has run twelve times, which is a lie the page cannot afford.
+      // so this is almost always set — the page would otherwise be empty on a case
+      // that has run twelve times, which is a lie it cannot afford.
       const shown = historyRun || null
-      const evidence = shown ? (shown.report && shown.report.evidence) || null : null
-      const checks = shown ? (shown.report && shown.report.checks) || [] : []
-      const steps = (shown && shown.report && shown.report.steps) || []
-      const verdict = latest ? latest.verdict : null
+      const report = (shown && shown.report) || null
+      const evidence = (report && report.evidence) || null
+      const checks = (report && report.checks) || []
+      const steps = (report && report.steps) || []
+      const verdict = (report && report.verdict) || (latest ? latest.verdict : null)
+      const caseId = (definition && definition.caseId) || (report && report.caseId) || (selected && selected.file) || ''
+      const title = (definition && definition.title) || (report && report.title) || (selected && selected.file) || ''
+      const passed = checks.filter((check) => check.ok).length
+      const durationMs = report ? report.durationMs : latest ? latest.durationMs : null
+      const fatal = report ? report.fatal : null
+      const teardown = report ? report.teardown : null
+      const environment = (report && report.environment) || {}
+      const statusKey = !verdict ? 'planned' : verdict === 'refused' ? 'blocked' : verdict
+      const statusWord = t(`status.${statusKey}`)
+      const shots = (evidence && evidence.browser && evidence.browser.screenshots) || []
       /**
-       * The detail page has one tab per question a failing run makes you ask, in
-       * the order you ask them: what did it check, what did the service say, what
-       * does the database look like now. Code and history are for afterwards.
+       * One tab per question a failing run makes you ask, in the order you ask
+       * them: what did it check, what did the service print, what does the
+       * database look like now. Code and history are for afterwards.
        *
-       * They are tabs rather than one long page because the answers are long and
-       * mostly irrelevant to each other: a console dump between you and the
-       * checkpoint that failed is a wall, not evidence.
+       * Tabs rather than one long page because the answers are long and mostly
+       * irrelevant to each other: a console dump between you and the checkpoint
+       * that failed is a wall, not evidence.
        */
       const tabs = [
         { name: 'checks', label: t('label.mode.checks'), count: checks.length },
-        { name: 'logs', label: t('label.mode.logs'), count: (evidence && evidence.logs && evidence.logs.lines && evidence.logs.lines.length) || 0 },
-        // Before/after pairs when the report has them, and the after-state on
-        // its own when it does not: a report written before snapshots existed
-        // still read the rows, and hiding them because the pair is missing
-        // throws away the answer to keep the shape of the question.
+        {
+          name: 'logs',
+          label: t('label.mode.logs'),
+          count: (evidence && evidence.logs && evidence.logs.lines && evidence.logs.lines.length) || 0,
+        },
+        // Before/after pairs when the report has them, and the after-state on its
+        // own when it does not: a report written before snapshots existed still
+        // read the rows, and hiding them because the pair is missing throws away
+        // the answer to keep the shape of the question.
         {
           name: 'database',
           label: t('label.mode.database'),
@@ -1286,7 +1558,7 @@ window.__ModuleLoader__.load({
         // Only offered when the case has a browser block: a tab that is always
         // there and always empty is a question the page cannot answer.
         ...(evidence && evidence.browser
-          ? [{ name: 'shots', label: t('label.mode.shots'), count: (evidence.browser.screenshots || []).length }]
+          ? [{ name: 'shots', label: t('label.mode.shots'), count: shots.length }]
           : []),
         { name: 'code', label: t('label.mode.code'), count: 0 },
         { name: 'history', label: t('label.mode.history'), count: (history || []).length },
@@ -1294,198 +1566,209 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'e2e-detail' },
+        // ---- the verdict card: one glance answers "is this green, and why" ----
         h(
           'div',
-          { className: 'e2e-detail-head' },
+          { className: 'e2e-hero' },
           h(
             'div',
-            null,
+            { className: 'e2e-hero-top' },
             h(
-              'div',
-              { className: 'e2e-detail-kicker' },
-              `${t('label.testCase')} · ${(definition && definition.caseId) || (selected && selected.file) || ''}`,
+              'span',
+              { className: 'e2e-verdict-badge', style: { color: TONES[verdictTone(statusKey === 'blocked' ? 'refused' : statusKey)] } },
+              `${t('label.verdictStrict')}: ${String(statusWord).toUpperCase()}`,
             ),
-            h('h3', { className: 'e2e-detail-title' }, (definition && definition.title) || (selected && selected.file) || ''),
-          ),
-          h('div', { className: 'e2e-spacer' }),
-          // The status word, not the verdict word: "Passed" is what the list calls
-          // this case, and the detail page must not invent a second vocabulary.
-          verdict
-            ? h(
-                Chip,
-                { tone: verdictTone(verdict) },
-                t(`status.${verdict === 'passed' ? 'passed' : verdict === 'failed' ? 'failed' : 'generated'}`),
-              )
-            : h(Chip, { tone: 'idle' }, t('status.planned')),
-          h(
-            Btn,
-            { small: true, variant: 'primary', onClick: onRun, disabled: running },
-            running ? t('action.running') : t('action.runTest'),
-          ),
-          h(Btn, { small: true, onClick: onEdit }, t('action.edit')),
-        ),
-        h(
-          'div',
-          { className: 'e2e-detail-body' },
-          // The properties column answers "what is this" without opening a tab.
-          h(
-            'aside',
-            { className: 'e2e-detail-side' },
-            h('div', { className: 'e2e-detail-side-head' }, t('label.properties')),
-            h(
-              'div',
-              { className: 'e2e-detail-prop' },
-              h('span', { className: 'e2e-field-label' }, t('label.caseId')),
-              h('span', null, (definition && definition.caseId) || '—'),
-            ),
-            h(
-              'div',
-              { className: 'e2e-detail-prop' },
-              h('span', { className: 'e2e-field-label' }, t('field.priority')),
-              h(Chip, { tone: definition && definition.priority === 'high' ? 'warn' : 'idle' }, t(`label.priority.${(definition && definition.priority) || 'medium'}`)),
-            ),
-            h(
-              'div',
-              { className: 'e2e-detail-prop' },
-              h('span', { className: 'e2e-field-label' }, t('field.endpoint')),
-              definition && definition.endpoint
-                ? h('code', { className: 'e2e-endpoint-tag' }, definition.endpoint)
-                : h(Chip, { tone: 'idle' }, t('label.noEndpoint')),
-            ),
-            definition && definition.group
-              ? h(
-                  'div',
-                  { className: 'e2e-detail-prop' },
-                  h('span', { className: 'e2e-field-label' }, t('label.group')),
-                  h('span', null, definition.group),
-                )
-              : null,
-            h(
-              'div',
-              { className: 'e2e-detail-prop' },
-              h('span', { className: 'e2e-field-label' }, t('label.lastRun')),
-              h('span', null, latest ? relativeTime(t, latest.startedAt) : t('label.neverRun')),
-            ),
-            definition && definition.description
-              ? h(
-                  'div',
-                  { className: 'e2e-detail-prop' },
-                  h('span', { className: 'e2e-field-label' }, t('label.goal')),
-                  h('div', { className: 'e2e-detail-goal' }, definition.description),
-                )
-              : null,
+            h('span', { className: 'e2e-hero-ref' }, `${t('label.permanentRef')} · ${caseId}`),
+            report && report.runId ? h('span', { className: 'e2e-hero-run' }, `${t('label.runId')}: ${report.runId}`) : null,
+            h('span', { className: 'e2e-spacer' }),
+            h(Btn, { small: true, variant: 'primary', onClick: onRun, disabled: running }, running ? t('action.running') : t('action.runTest')),
+            h(Btn, { small: true, onClick: onEdit }, t('action.edit')),
+            h(Btn, { small: true, onClick: onDone }, t('action.backToCases')),
           ),
           h(
             'div',
-            { className: 'e2e-detail-main' },
+            { className: 'e2e-hero-main' },
             h(
               'div',
-              { className: 'e2e-mode' },
-              tabs.map((item) =>
-                h(
-                  'button',
-                  {
-                    key: item.name,
-                    type: 'button',
-                    className: `e2e-mode-btn${tab === item.name ? ' is-active' : ''}`,
-                    onClick: () => setTab(item.name),
-                  },
-                  item.count > 0 ? `${item.label} ${item.count}` : item.label,
-                ),
+              { className: 'e2e-hero-text' },
+              h('div', { className: 'e2e-detail-kicker' }, `${t('label.testCase')} · ${caseId}`),
+              h('h3', { className: 'e2e-hero-title' }, `${caseId} · ${title}`),
+              definition && definition.description
+                ? h('p', { className: 'e2e-hero-desc' }, definition.description)
+                : null,
+              h(
+                'div',
+                { className: 'e2e-specs' },
+                definition && definition.endpoint ? h(SpecTag, { name: t('field.endpoint'), value: definition.endpoint }) : null,
+                definition && definition.scenario ? h(SpecTag, { name: t('field.scenario'), value: t(`label.scenario.${definition.scenario}`) }) : null,
+                definition && definition.priority ? h(SpecTag, { name: t('field.priority'), value: t(`label.priority.${definition.priority}`) }) : null,
+                definition && definition.group ? h(SpecTag, { name: t('field.group'), value: definition.group }) : null,
+                environment.target ? h(SpecTag, { name: 'target', value: environment.target }) : null,
+                environment.baseUrl ? h(SpecTag, { name: 'baseUrl', value: environment.baseUrl }) : null,
               ),
             ),
+            h(
+              'div',
+              { className: 'e2e-metrics' },
+              h(Metric, {
+                label: t('label.checksPassed'),
+                value: `${passed}/${checks.length}`,
+                note: verdict ? statusWord : t('label.neverRun'),
+                tone: checks.length > 0 && passed === checks.length ? TONES.pass : checks.length > 0 ? TONES.fail : undefined,
+              }),
+              h(Metric, {
+                label: t('label.executionDuration'),
+                value: durationMs === null || durationMs === undefined ? '—' : `${durationMs} ms`,
+                note: latest ? relativeTime(t, latest.startedAt) : t('label.neverRun'),
+              }),
+              h(Metric, {
+                label: t('label.fatalBoundary'),
+                value: fatal ? String(fatal.name || fatal.message || 'fatal') : t('label.none'),
+                note: fatal ? String(fatal.message || '') : t('label.cleanTeardown'),
+                tone: fatal ? TONES.fail : TONES.pass,
+              }),
+            ),
+          ),
+        ),
+        // ---- which question are we reading the answer to ----
+        h(
+          'div',
+          { className: 'e2e-tabstrip' },
+          tabs.map((item) =>
+            h(
+              'button',
+              {
+                key: item.name,
+                type: 'button',
+                className: `e2e-mode-btn${tab === item.name ? ' is-active' : ''}`,
+                onClick: () => setTab(item.name),
+              },
+              item.count > 0 ? `${item.label} ${item.count}` : item.label,
+            ),
+          ),
+          h('span', { className: 'e2e-spacer' }),
+        ),
+        // ---- the answer, next to the wire it answers about ----
+        h(
+          'div',
+          { className: 'e2e-inspect' },
+          h(
+            'div',
+            { className: 'e2e-inspect-main' },
             tab === 'checks'
-              ? h(
-                  'div',
-                  { className: 'e2e-detail-pane' },
-                  checks.length > 0
-                    ? h(
-                        'div',
-                        { className: 'e2e-checks' },
-                        checks.map((check, index) => h(CheckRow, { key: index, check })),
-                      )
-                    : h('div', { className: 'e2e-muted' }, t('label.noChecks')),
-                )
+              ? checks.length > 0
+                ? h(
+                    'div',
+                    { className: 'e2e-checks' },
+                    checks.map((check, index) => h(CheckRow, { key: index, check, index, t })),
+                  )
+                : h('div', { className: 'e2e-muted' }, t('label.noChecks'))
               : null,
             tab === 'logs'
-              ? h(
-                  'div',
-                  { className: 'e2e-detail-pane' },
-                  evidence && evidence.logs
-                    ? h(
-                        'div',
-                        null,
-                        h(
-                          'div',
-                          { className: 'e2e-muted' },
-                          `${evidence.logs.traceId} · ${evidence.logs.scopedLines}/${evidence.logs.totalLines}`,
-                        ),
-                        // Kept, but not checked: saying so is the difference
-                        // between "the run verified its logs" and "here is what
-                        // the service printed".
-                        evidence.logs.asserted === false
-                          ? h('div', { className: 'e2e-muted' }, t('label.logsNotAsserted'))
-                          : null,
-                        evidence.logs.traceIdPresent
-                          ? null
-                          : h('div', { className: 'e2e-warning' }, t('label.logsUnscoped')),
-                        h('pre', { className: 'e2e-pre is-tall' }, formatBody((evidence.logs.lines || []).join('\n'))),
-                      )
-                    : h('div', { className: 'e2e-muted' }, t('label.noLogs')),
-                )
+              ? evidence && evidence.logs
+                ? h(
+                    'div',
+                    { className: 'e2e-stack' },
+                    h(
+                      'div',
+                      { className: 'e2e-wire-caption' },
+                      `${evidence.logs.traceId} · ${evidence.logs.scopedLines}/${evidence.logs.totalLines} ${t('label.lines')}`,
+                    ),
+                    // Kept, but not checked: saying so is the difference between
+                    // "the run verified its logs" and "here is what the service
+                    // printed".
+                    evidence.logs.asserted === false ? h('div', { className: 'e2e-muted' }, t('label.logsNotAsserted')) : null,
+                    evidence.logs.traceIdPresent ? null : h('div', { className: 'e2e-warning' }, t('label.logsUnscoped')),
+                    h('pre', { className: 'e2e-pre is-tall' }, formatBody((evidence.logs.lines || []).join('\n'))),
+                  )
+                : h('div', { className: 'e2e-muted' }, t('label.noLogs'))
               : null,
             tab === 'database'
-              ? h(
-                  'div',
-                  { className: 'e2e-detail-pane' },
-                  evidence && evidence.snapshots && evidence.snapshots.length > 0
-                    ? evidence.snapshots.map((snapshot, index) =>
-                        h(DatabaseDiff, { key: index, t, snapshot }),
-                      )
-                    : evidence && evidence.database && evidence.database.length > 0
-                      ? evidence.database.map((entry, index) =>
-                          h(DatabaseRows, { key: index, t, entry }),
-                        )
-                      : h('div', { className: 'e2e-muted' }, t('label.noSnapshots')),
-                )
+              ? evidence && evidence.snapshots && evidence.snapshots.length > 0
+                ? h(
+                    'div',
+                    { className: 'e2e-stack' },
+                    evidence.snapshots.map((snapshot, index) => h(DatabaseDiff, { key: index, t, snapshot })),
+                  )
+                : evidence && evidence.database && evidence.database.length > 0
+                  ? h(
+                      'div',
+                      { className: 'e2e-stack' },
+                      evidence.database.map((entry, index) => h(DatabaseRows, { key: index, t, entry })),
+                    )
+                  : h('div', { className: 'e2e-muted' }, t('label.noSnapshots'))
               : null,
             tab === 'code' ? h('pre', { className: 'e2e-pre is-plan' }, (selected && selected.yaml) || '') : null,
             tab === 'shots' ? h(ShotsPane, { t, browser: evidence && evidence.browser }) : null,
-            tab === 'history'
-              ? h(HistoryPanel, { t, history, run: historyRun, onOpenRun, loading: historyLoading })
-              : null,
-            // Output stays visible under every tab: whatever the reader is
-            // looking at, "what did the service answer" is the next question.
+            tab === 'history' ? h(HistoryPanel, { t, history, run: historyRun, onOpenRun, loading: historyLoading }) : null,
+          ),
+          // The rail answers the questions that are the same whatever tab you are
+          // on: what is this, what went over the wire, what did it print, where are
+          // the files.
+          h(
+            'aside',
+            { className: 'e2e-rail' },
             h(
               'div',
-              { className: 'e2e-output' },
-              h('div', { className: 'e2e-evidence-head' }, t('label.mode.output')),
-              evidence && evidence.response
-                ? h(
-                    'div',
-                    null,
-                    h('div', { className: 'e2e-muted' }, `${t('label.status')}: ${evidence.response.status} ${evidence.response.statusText || ''}`),
-                    h('pre', { className: 'e2e-pre' }, formatBody(evidence.response.body)),
-                  )
-                : h('div', { className: 'e2e-muted' }, t('label.noHistory')),
-              steps.length > 0
-                ? h(
-                    'div',
-                    { className: 'e2e-steps' },
-                    steps.map((item, index) => h('div', { key: index, className: 'e2e-muted' }, `+${item.at} ms · ${item.name}`)),
-                  )
-                : null,
+              { className: 'e2e-rail-section' },
+              h('div', { className: 'e2e-rail-head' }, t('label.properties')),
+              h(
+                'div',
+                { className: 'e2e-rail-body' },
+                h(
+                  'div',
+                  { className: 'e2e-kv-row' },
+                  h('span', { className: 'e2e-kv-key' }, t('label.caseId')),
+                  h('span', { className: 'e2e-kv-value' }, caseId || '—'),
+                ),
+                definition && definition.endpoint
+                  ? h(
+                      'div',
+                      { className: 'e2e-kv-row' },
+                      h('span', { className: 'e2e-kv-key' }, t('field.endpoint')),
+                      h('span', { className: 'e2e-kv-value', title: definition.endpoint }, definition.endpoint),
+                    )
+                  : null,
+                h(
+                  'div',
+                  { className: 'e2e-kv-row' },
+                  h('span', { className: 'e2e-kv-key' }, t('label.lastRun')),
+                  h('span', { className: 'e2e-kv-value' }, latest ? relativeTime(t, latest.startedAt) : t('label.neverRun')),
+                ),
+                steps.length > 0
+                  ? h(
+                      'div',
+                      { className: 'e2e-kv-row' },
+                      h('span', { className: 'e2e-kv-key' }, t('label.stepCount')),
+                      h('span', { className: 'e2e-kv-value' }, String(steps.length)),
+                    )
+                  : null,
+              ),
+            ),
+            h(
+              'div',
+              { className: 'e2e-rail-section' },
+              h('div', { className: 'e2e-rail-head' }, t('label.wireTrace')),
+              h('div', { className: 'e2e-rail-body' }, h(WireTrace, { t, evidence })),
+            ),
+            h(
+              'div',
+              { className: 'e2e-rail-section' },
+              h('div', { className: 'e2e-rail-head' }, t('label.logTail')),
+              h('div', { className: 'e2e-rail-body' }, h(LogTail, { t, logs: evidence && evidence.logs })),
+            ),
+            h(
+              'div',
+              { className: 'e2e-rail-section' },
+              h('div', { className: 'e2e-rail-head' }, t('label.evidenceFiles')),
+              h('div', { className: 'e2e-rail-body' }, h(EvidenceFiles, { t, run: shown, evidence, shots: shots.length, onOpenReport })),
             ),
           ),
         ),
-        h(
-          'div',
-          { className: 'e2e-cases-bar' },
-          h('div', { className: 'e2e-spacer' }),
-          h(Btn, { small: true, onClick: onDone }, t('action.backToCases')),
-        ),
+        h(AuditBar, { t, report, teardown }),
       )
     }
+
 
     function SidebarIcon(props) {
       const size = props && typeof props.size === 'number' ? props.size : 20
@@ -1513,28 +1796,38 @@ window.__ModuleLoader__.load({
 
     /* ---------- the run surface ---------- */
 
+    /**
+     * One checkpoint, as a row you can point at in a bug report.
+     *
+     * The number matters as much as the verdict: "check 4 is the one that failed"
+     * is a sentence people say to each other. The right-hand word is the same
+     * vocabulary in every run, so a reader scanning the column sees `PASSED` and
+     * `FAILED` line up rather than two shapes of sentence.
+     */
     function CheckRow(props) {
-      const { check } = props
+      const { check, index, t } = props
       const tone = check.ok ? TONES.pass : TONES.fail
+      const number = typeof index === 'number' ? `${index + 1}. ` : ''
       return h(
         'div',
-        { className: 'e2e-check' },
+        { className: `e2e-check${check.ok ? '' : ' is-failed'}` },
         h('span', { className: 'e2e-check-mark', style: { color: tone } }, check.ok ? '✓' : '✗'),
         h(
           'div',
           { className: 'e2e-check-body' },
-          h('div', { className: 'e2e-check-label' }, check.label),
+          h('div', { className: 'e2e-check-label' }, `${number}${check.label || ''}`),
           check.ok
             ? null
             : h(
                 'div',
                 { className: 'e2e-check-diff' },
-                h('span', null, `expected ${formatValue(check.expected)}`),
+                h('span', null, `${t ? t('label.expected') : 'expected'} ${formatValue(check.expected)}`),
                 h('span', { className: 'e2e-muted' }, ' · '),
-                h('span', null, `actual ${formatValue(check.actual)}`),
+                h('span', null, `${t ? t('label.actual') : 'actual'} ${formatValue(check.actual)}`),
               ),
           check.ok || !check.detail ? null : h('div', { className: 'e2e-check-detail' }, String(check.detail)),
         ),
+        h('span', { className: 'e2e-check-word', style: { color: tone } }, check.ok ? 'PASSED' : 'FAILED'),
       )
     }
 
@@ -1859,7 +2152,11 @@ window.__ModuleLoader__.load({
           : null,
         checks.length === 0 && run.status === 'finished'
           ? h('div', { className: 'e2e-muted' }, t('empty.noChecks'))
-          : h('div', { className: 'e2e-checks' }, checks.map((check, index) => h(CheckRow, { key: index, check }))),
+          : h(
+              'div',
+              { className: 'e2e-checks' },
+              checks.map((check, index) => h(CheckRow, { key: index, check, index, t })),
+            ),
         run.explanation
           ? h(
               'div',
@@ -2825,6 +3122,7 @@ window.__ModuleLoader__.load({
           onRun: startRun,
           running: busy === 'run',
           onDone: () => setView('cases'),
+          onOpenReport: openReport,
         }),
         run ? h(RunSurface, { t, run, onExplain: explain, explaining: busy === 'explain', onOpenReport: openReport }) : null,
         reportsPanel,
@@ -3295,35 +3593,338 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-plan-row.is-active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
 .e2e-plan-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-plan-editor { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-.e2e-detail { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
-.e2e-detail-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
-.e2e-detail-kicker { font-size: 11.5px; color: var(--dsw-alias-label-secondary); letter-spacing: 0.02em; }
-.e2e-detail-title { margin: 2px 0 0; font-size: 17px; font-weight: 600; color: var(--dsw-alias-label-primary); }
-.e2e-detail-body { display: flex; align-items: stretch; gap: 14px; min-height: 0; flex: 1 1 auto; }
-.e2e-detail-side {
-  flex: 0 0 230px;
+/* ---- the case detail page ----------------------------------------------
+   Layout is a verdict card, a tab strip, then a two-column inspection area:
+   the tab you asked about on the left, the wire and the log tail on the
+   right. The rail stays put while tabs change, because "what did the
+   service answer" is the question you keep asking under every tab.
+   Depth is a 1px border, never a shadow: a shadow on a dark surface reads
+   as a smudge, and two nested cards are indistinguishable. */
+.e2e-detail { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.e2e-detail-pane { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+
+/* The verdict card. Reading order is verdict, identity, title, evidence
+   counts — the same order in which a person decides whether to keep
+   reading. */
+.e2e-hero {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* The card keeps its height: it is the page's verdict, and a card squeezed to
+     two lines because the panel below wanted the room is unreadable. */
+  flex: 0 0 auto;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 10px;
-  padding: 12px;
-  align-self: flex-start;
+  padding: 12px 14px;
+  background: var(--dsw-alias-bg-layer-1);
 }
-.e2e-detail-side-head { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
-.e2e-detail-prop { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; min-width: 0; }
-.e2e-detail-goal {
+.e2e-hero-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.e2e-verdict-badge {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.e2e-hero-ref,
+.e2e-hero-run {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-secondary);
+}
+.e2e-hero-ref { color: var(--dsw-alias-label-primary); }
+.e2e-hero-main { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.e2e-hero-text { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.e2e-detail-kicker { font-size: 11.5px; color: var(--dsw-alias-label-secondary); letter-spacing: 0.02em; }
+.e2e-hero-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--dsw-alias-label-primary); line-height: 1.35; }
+.e2e-hero-desc {
+  margin: 0;
   font-size: 12.5px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--dsw-alias-label-secondary);
   white-space: pre-wrap;
+  max-width: 68ch;
+}
+
+/* Specs and metrics: the two places a value has to line up between rows to be
+   comparable, so both are grids with a fixed key column. */
+.e2e-specs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.e2e-spec {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+  max-width: 100%;
+}
+.e2e-spec-key { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dsw-alias-label-tertiary); }
+.e2e-spec-value {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 34ch;
+}
+.e2e-metrics { display: flex; gap: 10px; flex: 0 0 auto; flex-wrap: wrap; }
+.e2e-metric {
+  min-width: 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+}
+.e2e-metric-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dsw-alias-label-tertiary); }
+.e2e-metric-value {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--dsw-alias-label-primary);
+}
+.e2e-metric-note { font-size: 11px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+
+/* Tabs are 36px tall with a 2px underline on the active one: the underline is
+   the whole affordance, so it has to be visible against a dark surface. */
+.e2e-tabstrip {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  /* Height is the tab's, not the flex container's: without this the strip was
+     squeezed to nine pixels between the hero and the inspect pane, and the
+     labels were sliced in half. */
+  flex: 0 0 auto;
+  min-height: 34px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.e2e-tabstrip .e2e-mode-btn {
+  height: 34px;
+  padding: 0 11px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12.5px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+.e2e-tabstrip .e2e-mode-btn:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }
+.e2e-tabstrip .e2e-mode-btn.is-active {
+  color: var(--dsw-alias-brand-primary);
+  border-bottom-color: var(--dsw-alias-brand-primary);
+}
+
+/* Two columns: whatever the tab shows, and the wire it is about. */
+.e2e-inspect { display: flex; gap: 12px; align-items: flex-start; min-height: 0; flex: 1 1 auto; }
+.e2e-inspect-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.e2e-rail {
+  flex: 0 0 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.e2e-rail-section {
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-layer-1);
+}
+.e2e-rail-head {
+  padding: 7px 11px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dsw-alias-label-tertiary);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-2);
+}
+.e2e-rail-body { padding: 9px 11px; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+
+/* Key/value rows: the key column is fixed so values line up between rows,
+   which is the only reason to put them in rows at all. */
+.e2e-kv { display: flex; flex-direction: column; gap: 3px; }
+.e2e-kv-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  min-width: 0;
+}
+.e2e-rail-body > .e2e-kv-row { display: flex; }
+.e2e-kv-key {
+  flex: 0 0 82px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.e2e-kv-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The wire: method badge, URL, headers, then the two bodies. */
+.e2e-wire { display: flex; flex-direction: column; gap: 10px; }
+.e2e-wire-part { display: flex; flex-direction: column; gap: 5px; }
+.e2e-wire-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; }
+.e2e-wire-caption {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dsw-alias-label-tertiary);
+}
+.e2e-method-badge {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--dsw-alias-brand-primary);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);
+}
+.e2e-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.e2e-status-badge {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+/* The log tail: mono, 26px rows, level-coloured. Colour is the only way a
+   reader finds the ERROR line in fourteen lines of noise. */
+.e2e-logtail {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 7px;
+  background: var(--dsw-alias-bg-base);
+  overflow: hidden;
+}
+.e2e-logline {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.65;
+  padding: 1px 8px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.e2e-logline.is-warn { color: var(--dsw-alias-state-warn-primary); background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, transparent); }
+.e2e-logline.is-error,
+.e2e-logline.is-fatal { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent); }
+.e2e-logline.is-debug { color: var(--dsw-alias-label-tertiary); }
+
+/* Evidence files: one button per artefact, name on the left, what it is on
+   the right. Disabled when there is nothing to open — a link that does
+   nothing is worse than a line that says so. */
+.e2e-links { display: flex; flex-direction: column; gap: 3px; }
+.e2e-link {
+  appearance: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  min-width: 0;
+}
+.e2e-link:not(:disabled):hover { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l1); }
+.e2e-link:disabled { cursor: default; opacity: 0.75; }
+.e2e-link-label { flex: 0 0 auto; color: var(--dsw-alias-label-tertiary); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+.e2e-link-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The teardown strip: facts that decide whether a green run counts. */
+.e2e-audit {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 7px 12px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
-  padding: 8px 10px;
-  background: var(--dsw-alias-bg-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-secondary);
 }
-.e2e-detail-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.e2e-detail-pane { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.e2e-audit-item { display: inline-flex; align-items: baseline; gap: 6px; }
+.e2e-audit-item.is-bad { color: var(--dsw-alias-state-error-primary); }
+.e2e-audit-key { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dsw-alias-label-tertiary); }
+
+/* A failed checkpoint gets a tinted row: on a page of greens, the one red line
+   has to find the reader, not the other way round. */
+.e2e-checks { display: flex; flex-direction: column; gap: 2px; }
+.e2e-check { display: flex; gap: 8px; align-items: flex-start; padding: 5px 8px; border-radius: 6px; }
+.e2e-check.is-failed { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent); }
+.e2e-check-mark { width: 13px; flex: 0 0 13px; font-weight: 700; }
+.e2e-check-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.e2e-check-label { font-size: 12.5px; color: var(--dsw-alias-label-primary); }
+.e2e-check-diff {
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  word-break: break-word;
+}
+.e2e-check-detail { font-size: 11.5px; color: var(--dsw-alias-label-secondary); white-space: pre-wrap; word-break: break-word; }
+.e2e-check-word {
+  flex: 0 0 auto;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding-top: 1px;
+}
+
+.e2e-stack { display: flex; flex-direction: column; gap: 10px; }
 .e2e-db-diff {
   display: flex;
   flex-direction: column;
@@ -3331,6 +3932,7 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 10px;
   padding: 10px;
+  background: var(--dsw-alias-bg-layer-1);
 }
 .e2e-db-diff .e2e-db-head { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dsw-alias-label-primary); }
 /* Side by side while there is room, stacked when there is not: two tables of
@@ -3345,14 +3947,6 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-shot-link { display: block; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow: hidden; }
 .e2e-shot-img { display: block; width: 100%; height: auto; }
 .e2e-shot-name { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
-.e2e-output {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 10px;
-  padding: 12px;
-}
 .e2e-pre.is-plan { flex: 1 1 auto; min-height: 200px; overflow: auto; }
 .e2e-history { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
 .e2e-history-list { display: flex; flex-direction: column; gap: 4px; }
@@ -3512,13 +4106,6 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 
 .e2e-run { display: flex; flex-direction: column; gap: 8px; }
 .e2e-run-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.e2e-checks { display: flex; flex-direction: column; gap: 3px; }
-.e2e-check { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; }
-.e2e-check-mark { width: 14px; flex: 0 0 14px; font-weight: 700; }
-.e2e-check-body { min-width: 0; }
-.e2e-check-label { font-size: 12.5px; }
-.e2e-check-diff { font-size: 11.5px; color: var(--dsw-alias-label-secondary); font-family: ui-monospace, monospace; }
-.e2e-check-detail { font-size: 11.5px; color: var(--dsw-alias-label-secondary); white-space: pre-wrap; }
 .e2e-warnings { margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--dsw-alias-state-warn-primary); }
 .e2e-fatal { border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, transparent); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
 .e2e-explain { border-left: 2px solid var(--dsw-alias-brand-primary); padding-left: 10px; }

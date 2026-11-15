@@ -9,10 +9,16 @@ package-lock.json
 pnpm-lock.yaml
 
 # Scratch files the probes write and delete; anything left over was a crash.
-dev/_*.mjs
+# The redesign kept a few `dev/_*.txt` / `.css` / `.json` around as splice
+# sources and extracted theme blocks — none of them are deliverables.
+dev/_*
 dev/.reload-state/
 *.tmp-*
 *.check-*
+
+# `npm run preview` output: real screenshots and the HTML they came from.
+# They are per-machine evidence, not source.
+dev/preview/
 
 # Editors and the OS.
 .vscode/
