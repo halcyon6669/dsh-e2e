@@ -48,7 +48,10 @@ window.__ModuleLoader__.load({
         'action.generating': 'Generating…',
         'action.scan': 'Scan the project for endpoints',
         'action.scanning': 'Scanning…',
-        'action.scaffold': 'Use this endpoint',
+        'action.importPicked': 'Import {count}',
+        'action.importing': 'Importing…',
+        'action.selectAll': 'Select all',
+        'action.clearSelection': 'Clear',
         'action.close': 'Close',
         'action.retry': 'Retry',
         'action.reopen': 'Open',
@@ -73,7 +76,7 @@ window.__ModuleLoader__.load({
         'label.generatePlaceholder': 'e.g. registering with a taken username returns 409 and writes no second row',
         'label.unsaved': 'unsaved changes',
         'label.scan': 'Endpoints in this project',
-        'label.scanHint': 'Read from the Spring annotations in the source. Pick one and the request line, the sample body and the TODO comments are filled in for you.',
+        'label.scanHint': 'Read from the Spring annotations in the source. Tick the endpoints that deserve a case, and each one becomes a case file to fill in.',
         'label.scanned': '{files} files · {endpoints} endpoints · {entities} tables',
         'label.endpointBody': 'body',
         'label.endpointNoBody': 'no body',
@@ -102,6 +105,7 @@ window.__ModuleLoader__.load({
         'empty.noCases': 'No case files in this folder yet. Create one, or generate one from a description.',
         'empty.selectCase': 'Pick a case on the left, or create one.',
         'empty.noChecks': 'This run recorded no assertions.',
+        'empty.noEndpoints': 'The scan found no endpoints in this project. Check the project path, or that it is a Spring project.',
 
         'notice.saved': 'Saved {file}.',
         'notice.savedAssigned': 'Saved {file} with case id {caseId}.',
@@ -109,8 +113,9 @@ window.__ModuleLoader__.load({
         'notice.validated': 'The case loads and the guard would allow it.',
         'notice.generated': 'Generated with {model}. Read it before you run it.',
         'notice.runStarted': 'Run started — the service is starting.',
-        'notice.scanned': 'Found {endpoints} endpoints in {files} files.',
-        'notice.scaffolded': 'Skeleton for {path} — fill in the TODOs, then save.',
+        'notice.imported': 'Imported {count} case(s).',
+        'notice.importedPartly': 'Imported {count} case(s); {skipped} were left alone.',
+        'notice.nothingToDelete': 'Nothing here has a target or a case directory, so there is nothing to delete.',
 
         'error.title': 'The plugin API is unreachable',
         'error.registry': 'The registry could not be read',
@@ -240,7 +245,6 @@ window.__ModuleLoader__.load({
         'nav.tab.plan': 'Test plan',
         'action.runSelected': 'Run selected',
         'action.runFullRegression': 'Run full regression',
-        'action.refreshScan': 'Refresh scan',
         'action.createProject': 'Create project',
         'action.editProjects': 'Edit',
         'action.doneEditing': 'Done',
@@ -302,7 +306,10 @@ window.__ModuleLoader__.load({
         'action.generating': '生成中…',
         'action.scan': '扫描项目里的接口',
         'action.scanning': '扫描中…',
-        'action.scaffold': '用这个接口',
+        'action.importPicked': '导入 {count} 个',
+        'action.importing': '导入中…',
+        'action.selectAll': '全选',
+        'action.clearSelection': '清空',
         'action.close': '关闭',
         'action.retry': '重试',
         'action.reopen': '打开',
@@ -326,7 +333,7 @@ window.__ModuleLoader__.load({
         'label.generatePlaceholder': '例如：用已存在的用户名注册返回 409，且不写入第二行',
         'label.unsaved': '未保存的修改',
         'label.scan': '项目里的接口',
-        'label.scanHint': '从源码里的 Spring 注解读出来。选一个接口，请求行、示例请求体和 TODO 注释就都填好了。',
+        'label.scanHint': '从源码里的 Spring 注解读出来。勾选值得写成用例的接口，每个接口都会生成一个用例文件，再往里填内容。',
         'label.scanned': '{files} 个文件 · {endpoints} 个接口 · {entities} 张表',
         'label.endpointBody': '请求体',
         'label.endpointNoBody': '无请求体',
@@ -355,6 +362,7 @@ window.__ModuleLoader__.load({
         'empty.noCases': '这个文件夹里还没有用例。新建一个，或者根据描述生成一个。',
         'empty.selectCase': '在左边选一个用例，或者新建一个。',
         'empty.noChecks': '这次运行没有记录断言。',
+        'empty.noEndpoints': '这次扫描没有在这个项目里找到接口。检查一下项目路径，或者确认它是 Spring 项目。',
 
         'notice.saved': '已保存 {file}。',
         'notice.savedAssigned': '已保存 {file}，用例编号 {caseId}。',
@@ -362,8 +370,9 @@ window.__ModuleLoader__.load({
         'notice.validated': '用例可以加载，护栏也会放行。',
         'notice.generated': '由 {model} 生成。运行前请先读一遍。',
         'notice.runStarted': '已开始运行 —— 服务正在启动。',
-        'notice.scanned': '在 {files} 个文件里找到 {endpoints} 个接口。',
-        'notice.scaffolded': '{path} 的骨架已生成 —— 填好 TODO 再保存。',
+        'notice.imported': '已导入 {count} 个用例。',
+        'notice.importedPartly': '已导入 {count} 个用例；{skipped} 个没有动。',
+        'notice.nothingToDelete': '这里既没有 target 也没有用例目录，所以没有可删除的东西。',
 
         'error.title': '插件 API 不可达',
         'error.registry': '注册表读取失败',
@@ -490,7 +499,6 @@ window.__ModuleLoader__.load({
         'nav.tab.plan': '测试计划编辑',
         'action.runSelected': '运行选中用例',
         'action.runFullRegression': '执行全量回归',
-        'action.refreshScan': '刷新扫描',
         'action.createProject': '创建项目',
         'action.editProjects': '编辑',
         'action.doneEditing': '完成',
@@ -819,7 +827,7 @@ window.__ModuleLoader__.load({
      * reader thinks in; the endpoint is still on the row, so the grouping never
      * hides the route.
      */
-    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onEditPlan, onAddTests, onRunAll, running, checked, onToggleChecked, onRunSelected }) {
+    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onScan, onAddTests, onRunAll, running, checked, onToggleChecked, onRunSelected }) {
       const counts = project.statusCounts || { all: 0 }
       const tabs = ['all', 'planned', 'generated', 'running', 'passed', 'failed', 'blocked']
       const [folded, setFolded] = React.useState({})
@@ -877,7 +885,11 @@ window.__ModuleLoader__.load({
             ),
           ),
           h('div', { className: 'e2e-spacer' }),
-          h(Btn, { small: true, onClick: onEditPlan }, t('action.refreshScan')),
+          // Reading the endpoints out of the source is the one action here that
+          // is about the project rather than about the list, so it sits at the
+          // head of the toolbar's actions — the place a reader looks for "do
+          // something with all of this".
+          h(Btn, { small: true, onClick: onScan }, t('action.scan')),
           h(Btn, { small: true, onClick: onAddTests }, t('action.new')),
         ),
         h(
@@ -2341,95 +2353,123 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /* ---------- the scan box ---------- */
+    /* ---------- the scan dialog ---------- */
 
     /**
-     * Lists the endpoints the project already serves, so a new case starts from the
-     * real path and the real body shape instead of from memory.
+     * The endpoints this project already serves, as a list you tick.
      *
-     * Nothing is written here: picking an endpoint loads a skeleton into the editor,
-     * and the editor's Save button is the only thing that touches the disk.
+     * Reading the source is a whole-project question, so the scan runs once and
+     * the answer is a list; the reader's job is to choose which of those
+     * endpoints deserves a case. Ticking several and importing them together is
+     * the point — one dialog, one write, instead of twenty round trips through
+     * the editor.
+     *
+     * The scan itself, the ticked rows and the import all belong to the panel:
+     * this is a modal, and a modal that owned the answer it is showing would lose
+     * it the moment it re-rendered. It takes what it shows and what to do, the
+     * same way every other list in this panel does.
      */
-    function ScanBox(props) {
-      const { t, onScaffold, onScanned, scaffolding, error } = props
-      const [scan, setScan] = React.useState({ status: 'idle', data: null, error: null })
-      const [picked, setPicked] = React.useState(null)
-
-      const run = async () => {
-        setScan({ status: 'scanning', data: null, error: null })
-        try {
-          const data = await apiPost('/scan', {})
-          setScan({ status: 'ready', data, error: null })
-          if (onScanned) {
-            onScanned({
-              files: data.scannedFiles,
-              endpoints: (data.endpoints || []).length,
-            })
-          }
-        } catch (failure) {
-          setScan({ status: 'error', data: null, error: failure.message })
-        }
-      }
+    function ScanDialog(props) {
+      const { t, scan, picked, importing, importError, onTogglePicked, onPickAll, onImport, onRescan, onClose } = props
 
       const list = (scan.data && scan.data.endpoints) || []
+      const keyOf = (endpoint) => `${endpoint.httpMethod} ${endpoint.path}`
+      const allPicked = list.length > 0 && picked.size === list.length
 
       return h(
         'div',
-        { className: 'e2e-generate' },
-        h('label', { className: 'e2e-label' }, t('label.scan')),
-        h('div', { className: 'e2e-hint' }, t('label.scanHint')),
-        scan.status === 'ready' && scan.data
-          ? h(
-              'div',
-              { className: 'e2e-hint' },
-              t('label.scanned', {
-                files: scan.data.scannedFiles,
-                endpoints: list.length,
-                entities: (scan.data.entities || []).length,
-              }),
-            )
-          : null,
-        error ? h('div', { className: 'e2e-error' }, error) : null,
-        scan.error ? h('div', { className: 'e2e-error' }, scan.error) : null,
-        scan.status === 'ready'
-          ? h(
-              'div',
-              { className: 'e2e-endpoints' },
-              list.map((endpoint) => {
-                const key = `${endpoint.httpMethod} ${endpoint.path}`
-                const active = picked === key
-                return h(
-                  'button',
-                  {
-                    key,
-                    type: 'button',
-                    className: `e2e-endpoint${active ? ' is-active' : ''}`,
-                    onClick: () => {
-                      setPicked(key)
-                      onScaffold(endpoint)
-                    },
-                  },
-                  h('span', { className: 'e2e-method' }, endpoint.httpMethod),
-                  h('code', { className: 'e2e-endpoint-path' }, endpoint.path),
-                  h(
-                    'span',
-                    { className: 'e2e-muted' },
-                    endpoint.requestBody
-                      ? `${t('label.endpointBody')} ${endpoint.requestBody.type}`
-                      : t('label.endpointNoBody'),
-                  ),
-                  active && scaffolding ? h('span', { className: 'e2e-muted' }, t('action.scaffold')) : null,
-                )
-              }),
-            )
-          : null,
+        {
+          className: 'e2e-scan-backdrop',
+          onClick: (event) => {
+            if (event.target === event.currentTarget) onClose()
+          },
+        },
         h(
           'div',
-          { className: 'e2e-row' },
+          { className: 'e2e-scan' },
           h(
-            Btn,
-            { small: true, disabled: scan.status === 'scanning', onClick: run },
-            scan.status === 'scanning' ? t('action.scanning') : t('action.scan'),
+            'div',
+            { className: 'e2e-scan-head' },
+            h('strong', null, t('label.scan')),
+            h('div', { className: 'e2e-spacer' }),
+            h(Btn, { small: true, onClick: onClose }, t('action.close')),
+          ),
+          h('div', { className: 'e2e-hint' }, t('label.scanHint')),
+          scan.status === 'ready' && scan.data
+            ? h(
+                'div',
+                { className: 'e2e-hint' },
+                t('label.scanned', {
+                  files: scan.data.scannedFiles,
+                  endpoints: list.length,
+                  entities: (scan.data.entities || []).length,
+                }),
+              )
+            : null,
+          scan.error ? h('div', { className: 'e2e-error' }, scan.error) : null,
+          importError ? h('div', { className: 'e2e-error' }, importError) : null,
+          scan.status === 'scanning'
+            ? h('div', { className: 'e2e-hint' }, t('action.scanning'))
+            : null,
+          scan.status === 'ready' && list.length === 0
+            ? h('div', { className: 'e2e-empty-box' }, t('empty.noEndpoints'))
+            : null,
+          scan.status === 'ready' && list.length > 0
+            ? h(
+                'div',
+                { className: 'e2e-scan-list' },
+                list.map((endpoint) => {
+                  const key = keyOf(endpoint)
+                  const on = picked.has(key)
+                  return h(
+                    'label',
+                    { key, className: `e2e-scan-row${on ? ' is-picked' : ''}` },
+                    h('input', {
+                      type: 'checkbox',
+                      checked: on,
+                      onChange: () => onTogglePicked(endpoint),
+                    }),
+                    h('span', { className: 'e2e-method' }, endpoint.httpMethod),
+                    h('code', { className: 'e2e-endpoint-path' }, endpoint.path),
+                    h(
+                      'span',
+                      { className: 'e2e-muted' },
+                      endpoint.requestBody
+                        ? `${t('label.endpointBody')} ${endpoint.requestBody.type}`
+                        : t('label.endpointNoBody'),
+                    ),
+                  )
+                }),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'e2e-scan-actions' },
+            list.length > 0
+              ? h(
+                  Btn,
+                  { small: true, onClick: onPickAll },
+                  allPicked ? t('action.clearSelection') : t('action.selectAll'),
+                )
+              : null,
+            h(
+              Btn,
+              { small: true, disabled: scan.status === 'scanning', onClick: onRescan },
+              scan.status === 'scanning' ? t('action.scanning') : t('action.scan'),
+            ),
+            h('div', { className: 'e2e-spacer' }),
+            h(
+              Btn,
+              {
+                small: true,
+                variant: 'primary',
+                disabled: importing || picked.size === 0,
+                onClick: onImport,
+              },
+              importing
+                ? t('action.importing')
+                : t('action.importPicked', { count: picked.size }),
+            ),
           ),
         ),
       )
@@ -2459,6 +2499,21 @@ window.__ModuleLoader__.load({
       // True while the system folder dialog is open, so a second click on the
       // path cannot stack a second dialog on top of the first.
       const [pickingFolder, setPickingFolder] = React.useState(false)
+      // True while the scan dialog is open. Reading the project's endpoints is a
+      // dialog rather than a panel because it is a question about the whole
+      // project ("what does this service serve?") and the answer is a list you
+      // tick — that belongs on top of the case list, not inside a form.
+      const [scanning, setScanning] = React.useState(false)
+      // The scan's own state lives here rather than inside the dialog: the
+      // dialog is a view of the answer, and the answer outlives a re-render that
+      // a nested component's state would not cause. Re-opening the dialog is a
+      // fresh scan, so `openScan` starts one every time.
+      const [scanState, setScanState] = React.useState({ status: 'idle', data: null, error: null })
+      // Which scanned endpoints are ticked, keyed the same way the dialog keys its
+      // rows. A re-scan drops the ticks: they were answers to the previous list.
+      const [scanPicked, setScanPicked] = React.useState(() => new Set())
+      const [scanImporting, setScanImporting] = React.useState(false)
+      const [scanImportError, setScanImportError] = React.useState(null)
       const [reportText, setReportText] = React.useState(null)
       // Where a freshly generated document will be saved. Kept outside `selected`
       // because a generated case has no file on disk yet.
@@ -2762,47 +2817,90 @@ window.__ModuleLoader__.load({
       }
 
       /**
-       * Turns one scanned endpoint into a skeleton in the editor.
+       * Opens the scan dialog and starts the scan.
        *
-       * Like `generate`, the document has no path yet — it is a draft until Save.
-       * Unlike `generate`, nothing about it is guessed by a model: the path, method
-       * and body all come from the source that serves them.
+       * The dialog asks the project one question, and the answer is a list. It runs
+       * here rather than inside the dialog so that the answer is the panel's, not a
+       * component's: closing mid-scan and re-opening asks again from scratch, which
+       * is what a reader pressing "open" expects.
        */
-      const scaffold = async (endpoint) => {
-        setBusy('scaffold')
-        setProblems(null)
+      const openScan = async () => {
+        setScanning(true)
+        setScanState({ status: 'scanning', data: null, error: null })
+        setScanPicked(() => new Set())
+        setScanImportError(null)
         try {
-          const data = boot.data || {}
-          const databases = (registry.databases || []).map((db) => db.name)
-          const result = await apiPost('/scaffold', {
-            path: endpoint.path,
-            method: endpoint.httpMethod,
-            // Name the one database that exists, when there is exactly one: a
-            // skeleton with no database cannot assert anything, and picking for the
-            // author when there is no choice is not a guess.
-            database: databases.length === 1 ? databases[0] : undefined,
-          })
-          setSelected({
-            path: null,
-            file: `${result.id}.yaml`,
-            yaml: result.yaml,
-            original: '',
-            definition: null,
-            error: null,
-          })
-          setGeneratedInto(data.caseDirs && data.caseDirs[0] ? data.caseDirs[0] : null)
-          setNotice({ message: t('notice.scaffolded', { path: `${endpoint.httpMethod} ${endpoint.path}` }) })
-          // A skeleton is a draft: nothing to put in a form until it is saved and
-          // parsed, so show it as what it is.
-          setDraftFields(null)
-          setBaseFields(null)
-          setPlanMode('yaml')
-          setAdding(false)
-          setView('plan')
+          const data = await apiPost('/scan', {})
+          setScanState({ status: 'ready', data, error: null })
         } catch (error) {
-          setNotice({ isError: true, message: error.message })
+          setScanState({ status: 'error', data: null, error: error.message })
+        }
+      }
+
+      const toggleScanPick = (endpoint) =>
+        setScanPicked((current) => {
+          const next = new Set(current)
+          const key = `${endpoint.httpMethod} ${endpoint.path}`
+          if (next.has(key)) next.delete(key)
+          else next.add(key)
+          return next
+        })
+
+      const pickAllScanRows = () =>
+        setScanPicked((current) => {
+          const list = (scanState.data && scanState.data.endpoints) || []
+          const keys = list.map((endpoint) => `${endpoint.httpMethod} ${endpoint.path}`)
+          return current.size === keys.length ? new Set() : new Set(keys)
+        })
+
+      /**
+       * The scan dialog's write half: the ticked endpoints become case files.
+       *
+       * The Host does the writing and reports what it skipped — a file that is
+       * already there is never overwritten — so the notice counts both sides.
+       * The first case written opens in the editor: the whole point of importing
+       * a skeleton is to fill in its TODOs, and that is where they are.
+       */
+      const importedEndpoints = async (result) => {
+        const written = (result && result.written) || []
+        const skipped = (result && result.skipped) || []
+        setScanning(false)
+        setNotice(
+          skipped.length === 0
+            ? { message: t('notice.imported', { count: written.length }) }
+            : {
+                isError: false,
+                message: t('notice.importedPartly', {
+                  count: written.length,
+                  skipped: skipped.length,
+                }),
+              },
+        )
+        await refresh()
+        if (written.length > 0) {
+          await openCase(written[0].file)
+          setPlanMode('yaml')
+          setView('plan')
+        }
+      }
+
+      /** Ticking rows is a request; importing them is one POST for the whole batch. */
+      const importPickedScan = async () => {
+        const list = (scanState.data && scanState.data.endpoints) || []
+        const endpoints = list
+          .filter((endpoint) => scanPicked.has(`${endpoint.httpMethod} ${endpoint.path}`))
+          .map((endpoint) => ({ method: endpoint.httpMethod, path: endpoint.path }))
+        if (endpoints.length === 0) return
+        const database = (registry.databases || []).length === 1 ? registry.databases[0].name : undefined
+        setScanImporting(true)
+        setScanImportError(null)
+        try {
+          const result = await apiPost('/import-endpoints', { endpoints, database })
+          await importedEndpoints(result)
+        } catch (error) {
+          setScanImportError(error.message)
         } finally {
-          setBusy(null)
+          setScanImporting(false)
         }
       }
 
@@ -2983,21 +3081,33 @@ window.__ModuleLoader__.load({
         // The registry knows targets, not display names: a card called "Record"
         // may stand for one target or several, so every registry name behind
         // each picked card is deleted in turn, and the card disappears when its
-        // last target goes.
-        const names = []
+        // last target goes. A card can also stand for nothing but a directory —
+        // cases that name no target, keyed `dir:` — and that is the shape that
+        // used to make this button do visibly nothing at all: it collected zero
+        // names and returned before it had sent a request.
+        const picks = []
         for (const project of projects.filter((item) => pickedProjects.has(item.key))) {
-          for (const name of project.targets || []) names.push(name)
+          const targets = project.targets || []
+          if (targets.length === 0) picks.push({ kind: 'directory', name: project.key })
+          else for (const name of targets) picks.push({ name })
         }
-        if (names.length === 0) return
+        if (picks.length === 0) {
+          setNotice({ isError: true, message: t('notice.nothingToDelete') })
+          return
+        }
         setBusy('delete-picked')
         const errors = []
         let done = 0
-        for (const name of names) {
+        for (const pick of picks) {
           try {
-            await apiDelete(`/project?name=${q(name)}`)
+            const query =
+              pick.kind === 'directory'
+                ? `kind=directory&name=${q(pick.name)}`
+                : `name=${q(pick.name)}`
+            await apiDelete(`/project?${query}`)
             done += 1
           } catch (error) {
-            errors.push(`${name}: ${error.message}`)
+            errors.push(`${pick.name}: ${error.message}`)
           }
         }
         setBusy(null)
@@ -3394,7 +3504,7 @@ window.__ModuleLoader__.load({
             openCase(file)
             setView('detail')
           },
-          onEditPlan: () => setView('plan'),
+          onScan: openScan,
           onAddTests: () => setAdding((current) => !current),
           onRunAll: () => runAll(projectCases.map((entry) => entry.file)),
           running: busy === 'run-all' || Boolean(batch && batch.status === 'running'),
@@ -3437,13 +3547,6 @@ window.__ModuleLoader__.load({
                 error: null,
                 databases: (registry.databases || []).map((db) => db.name),
                 targets: registry.targets || [],
-              }),
-              h(ScanBox, {
-                t,
-                onScaffold: scaffold,
-                scaffolding: busy === 'scaffold',
-                onScanned: (counts) => setNotice({ message: t('notice.scanned', counts) }),
-                error: null,
               }),
             )
           : null,
@@ -3630,6 +3733,23 @@ window.__ModuleLoader__.load({
             )
           : null,
         view === 'plan' ? planPage : view === 'detail' ? detailPage : casesPage,
+        // The scan dialog sits above whatever page is showing: it is a question
+        // about the project as a whole, and closing it should put the reader back
+        // exactly where they were.
+        scanning
+          ? h(ScanDialog, {
+              t,
+              scan: scanState,
+              picked: scanPicked,
+              importing: scanImporting,
+              importError: scanImportError,
+              onTogglePicked: toggleScanPick,
+              onPickAll: pickAllScanRows,
+              onImport: importPickedScan,
+              onRescan: openScan,
+              onClose: () => setScanning(false),
+            })
+          : null,
       )
     }
 
@@ -4674,10 +4794,14 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-row { display: flex; gap: 6px; align-items: center; }
 .e2e-check-row { display: flex; align-items: center; gap: 7px; font-size: 12px; cursor: pointer; }
 .e2e-generate { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-1); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-.e2e-endpoints { display: flex; flex-direction: column; gap: 3px; max-height: 280px; overflow: auto; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 4px; background: var(--dsw-alias-bg-base); }
-.e2e-endpoint { display: flex; align-items: center; gap: 8px; text-align: left; border: 1px solid transparent; border-radius: 6px; background: transparent; color: inherit; padding: 5px 7px; cursor: pointer; font-size: 12px; }
-.e2e-endpoint:hover { background: var(--dsw-alias-bg-layer-2); }
-.e2e-endpoint.is-active { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
+.e2e-scan-backdrop { position: fixed; inset: 0; z-index: 40; background: color-mix(in srgb, var(--dsw-alias-bg-base) 72%, transparent); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.e2e-scan { width: min(720px, 100%); max-height: min(78vh, 720px); overflow: auto; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); box-shadow: 0 18px 48px color-mix(in srgb, var(--dsw-alias-bg-base) 70%, transparent); padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.e2e-scan-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.e2e-scan-list { display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow: auto; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 4px; background: var(--dsw-alias-bg-base); }
+.e2e-scan-row { display: flex; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 6px; padding: 5px 7px; cursor: pointer; font-size: 12px; }
+.e2e-scan-row:hover { background: var(--dsw-alias-bg-layer-2); }
+.e2e-scan-row.is-picked { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
+.e2e-scan-actions { display: flex; align-items: center; gap: 6px; }
 .e2e-method { flex: 0 0 46px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.04em; color: var(--dsw-alias-brand-primary); }
 .e2e-endpoint-path { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-create { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px 8px; }

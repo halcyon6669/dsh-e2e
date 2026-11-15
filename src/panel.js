@@ -14,7 +14,7 @@
  *   3. The API answers the same shapes the tools do, so the panel and the agent
  *      never disagree about what a run produced.
  */
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadCaseFile, CaseError, withCaseId } from './case.js'
@@ -22,7 +22,7 @@ import { runCase, redactReport } from './runner.js'
 import { renderSummary } from './report.js'
 import { auditBaseUrl, checkTargets } from './guard.js'
 import { resolveEnvironment, describeEnvironment } from './resolve.js'
-import { loadRegistry, describeDatabase, knownNames, resolveTarget, addTarget, removeTarget, RegistryError } from './registry.js'
+import { loadRegistry, describeDatabase, isRegistryFileName, knownNames, resolveTarget, addTarget, removeTarget, RegistryError } from './registry.js'
 import { generateCase, explainFailure, GenerateError } from './ai.js'
 import { listProjects } from './projects.js'
 import { describeSteps, hasAssertions } from './plan.js'
@@ -43,6 +43,16 @@ import {
 } from './store.js'
 
 const MAX_BODY_BYTES = 1024 * 1024
+
+/** Whether a file is already there, without raising the ENOENT that `stat` would. */
+async function caseExists(path) {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * The version the panel reports is the package's own version, read once at load
@@ -784,6 +794,54 @@ export function createPanel({ ctx, config = {}, state }) {
   }
 
   /**
+   * Deletes a project that is a directory rather than a registry target.
+   *
+   * Cases that name no target gather into a project of their own, keyed `dir:`
+   * and carrying no registry entry at all — so there is no target to remove and
+   * the deletion is entirely about files. A directory that is one of the
+   * configured case roots survives: it is the panel's data directory, shared by
+   * every case written there, and removing it because one card was removed would
+   * take unrelated tests with it. A directory project that is a real
+   * sub-directory goes as a whole.
+   */
+  async function deleteDirectoryProject(key, root) {
+    const raw = String(key).replace(/^dir:/i, '').trim()
+    if (!raw) throw new PanelError('a project directory is needed to delete it', 422)
+    const configured = roots().map((entry) => resolve(entry))
+    const wanted = resolve(raw)
+    const rootDir = configured.find((entry) => entry.toLowerCase() === wanted.toLowerCase())
+    const dir = rootDir || wanted
+    if (!configured.some((entry) => isInside(entry, dir))) {
+      throw new PanelError(
+        `${dir} is not inside a case directory, so the panel will not delete it`,
+        422,
+        { dir },
+      )
+    }
+
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch (error) {
+      throw new PanelError(`cannot read ${dir}: ${error.message}`, 422, { dir })
+    }
+    const caseFiles = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => (name.endsWith('.yml') || name.endsWith('.yaml')) && !isRegistryFileName(name))
+
+    if (rootDir) {
+      // The shared case root: its cases go, the directory itself stays so the
+      // next save still has somewhere to land.
+      for (const name of caseFiles) await rm(join(dir, name), { force: true })
+      return { ok: true, name: basename(dir), registryFile: null, removedDir: null, removedCases: caseFiles.length, keptDir: dir }
+    }
+    for (const name of caseFiles) await rm(join(dir, name), { force: true })
+    await rm(dir, { recursive: true, force: true })
+    return { ok: true, name: basename(dir), registryFile: null, removedDir: dir, removedCases: caseFiles.length, keptDir: null }
+  }
+
+  /**
    * Delete a project: the registry target and the case directory it owned.
    *
    * This is the destructive half of "create project", so it is narrow on
@@ -799,6 +857,14 @@ export function createPanel({ ctx, config = {}, state }) {
     if (!name) throw new PanelError('a project name is needed to delete it', 422)
     const root = roots()[0] || defaultCaseDir({ state })
     const registry = await loadRegistry({ config, caseDir: root, env: process.env })
+
+    // A card that stands for a directory rather than for a registry target —
+    // cases that name no target, or a folder under the case root — has no
+    // registry entry to remove. Its directory is the whole project, so that is
+    // what goes; refusing here is what made the button look dead.
+    const isDirectory = input.kind === 'directory' || name.startsWith('dir:')
+    if (isDirectory) return deleteDirectoryProject(name, root)
+
     if (!registry.targets || !registry.targets[name]) {
       throw new PanelError(`unknown project "${name}" — the registry does not define it`, 422, { name })
     }
@@ -906,7 +972,16 @@ export function createPanel({ ctx, config = {}, state }) {
     { method: 'GET', path: '/reports', handler: async () => listReports({ config, state }) },
     { method: 'GET', path: '/projects', handler: async () => listProjects({ config, state, env: process.env }) },
     { method: 'POST', path: '/project', mutate: true, handler: async (body) => createProject(body) },
-    { method: 'DELETE', path: '/project', mutate: true, handler: async (_body, url) => deleteProject({ name: url.searchParams.get('name') }) },
+    {
+      method: 'DELETE',
+      path: '/project',
+      mutate: true,
+      handler: async (_body, url) =>
+        deleteProject({
+          name: url.searchParams.get('name'),
+          kind: url.searchParams.get('kind') || undefined,
+        }),
+    },
     {
       method: 'GET',
       path: '/shot',
@@ -954,6 +1029,7 @@ export function createPanel({ ctx, config = {}, state }) {
     { method: 'POST', path: '/generate', mutate: true, handler: async (body) => generate(body) },
     { method: 'POST', path: '/scan', mutate: true, handler: async (body) => scan(body) },
     { method: 'POST', path: '/scaffold', mutate: true, handler: async (body) => scaffold(body) },
+    { method: 'POST', path: '/import-endpoints', mutate: true, handler: async (body) => importEndpoints(body) },
   ]
 
   /**
@@ -1024,6 +1100,83 @@ export function createPanel({ ctx, config = {}, state }) {
     } catch (error) {
       throw new PanelError(error.message, 422, { path: input.path, method: input.method })
     }
+  }
+
+  /**
+   * Imports the picked endpoints as case files.
+   *
+   * The panel's scan dialog shows what the project serves and the reader ticks
+   * what is worth a case; this is the write half. The scan runs once for the
+   * whole batch — scanning per endpoint would re-read the source once per tick —
+   * and each case is then built from the endpoint the scan already found.
+   *
+   * Existing files are never overwritten: a second import of the same endpoint
+   * reports it as skipped instead of quietly replacing work someone has since
+   * filled in.
+   */
+  async function importEndpoints(input = {}) {
+    const picked = Array.isArray(input.endpoints) ? input.endpoints : []
+    if (picked.length === 0) throw new PanelError('no endpoints were picked to import', 422)
+    const projectPath = input.projectPath ? String(input.projectPath) : await defaultProjectPath()
+    if (!projectPath) {
+      throw new PanelError(
+        'no project path to scan: pass one, or give the registry target a projectPath',
+        422,
+      )
+    }
+    const target = input.target ? String(input.target) : await defaultTargetName()
+    if (!target) {
+      throw new PanelError(
+        'no target to put in the case: add a target to the registry, or pass one explicitly',
+        422,
+      )
+    }
+    const dir = roots()[0] || defaultCaseDir({ state })
+    await mkdir(dir, { recursive: true })
+
+    let scan
+    try {
+      const { scanProject } = await import('./scan.js')
+      scan = await scanProject({ projectPath })
+    } catch (error) {
+      throw new PanelError(`cannot scan ${projectPath}: ${error.message}`, 422, { projectPath })
+    }
+    const { buildSkeleton, renderSkeleton } = await import('./scaffold.js')
+    const tables = (scan.entities || []).map((entity) => entity.table)
+
+    const written = []
+    const skipped = []
+    for (const pick of picked) {
+      const method = String(pick.method || '').toUpperCase()
+      const path = String(pick.path || '').trim()
+      const endpoint = (scan.endpoints || []).find(
+        (item) => item.path === path && (method === '' || item.httpMethod === method),
+      )
+      if (!endpoint) {
+        skipped.push({ endpoint: `${method || 'ANY'} ${path}`, reason: 'the scan does not find it any more' })
+        continue
+      }
+      const label = `${endpoint.httpMethod} ${endpoint.path}`
+      try {
+        const skeleton = buildSkeleton(endpoint, {
+          target,
+          database: input.database,
+          schema: input.schema,
+          id: pick.id,
+        })
+        const file = join(dir, `${skeleton.document.id}.yaml`)
+        if (await caseExists(file)) {
+          skipped.push({ endpoint: label, reason: `${basename(file)} is already there` })
+          continue
+        }
+        const yaml = await renderSkeleton(skeleton, { tables })
+        const saved = await saveCase(file, yaml)
+        written.push({ endpoint: label, path: saved.path, file: saved.file, caseId: saved.caseId })
+      } catch (error) {
+        skipped.push({ endpoint: label, reason: error.message })
+      }
+    }
+    return { ok: true, projectPath, dir, target, written, skipped }
   }
 
   /**
@@ -1120,6 +1273,7 @@ export function createPanel({ ctx, config = {}, state }) {
     batchStatus,
     createProject,
     deleteProject,
+    importEndpoints,
     dispose() {
       runs.clear()
       batches.clear()

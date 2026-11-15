@@ -346,6 +346,19 @@ const PAST_REPORT = {
 /* ---------- the harness ---------- */
 
 const requested = []
+const SCAN = {
+  ok: true,
+  projectPath: 'E:/project/backend/Record',
+  scannedFiles: 42,
+  controllers: [],
+  dtos: [],
+  entities: [],
+  warnings: [],
+  endpoints: [
+    { httpMethod: 'POST', path: '/auth/register', javaMethod: 'register', requestBody: { type: 'RegisterDto', fields: [] } },
+    { httpMethod: 'GET', path: '/auth/me', javaMethod: 'me', requestBody: null },
+  ],
+}
 globalThis.fetch = async (url) => {
   const path = String(url).split('/api')[1] || ''
   requested.push(path)
@@ -355,7 +368,11 @@ globalThis.fetch = async (url) => {
       ? CASE_FILE
       : path.startsWith('/report?')
         ? PAST_REPORT
-        : BOOTSTRAP
+        : path.startsWith('/scan')
+          ? SCAN
+          : path.startsWith('/import-endpoints')
+            ? { ok: true, written: [{ endpoint: 'POST /auth/register', caseId: 'REG-009' }], skipped: [] }
+            : BOOTSTRAP
   return { ok: true, status: 200, json: async () => body }
 }
 
@@ -953,6 +970,66 @@ await test('every group offers to add a test to itself', async () => {
   const adds = elementsOf(opened).filter((node) => node.props && node.props.className === 'e2e-add-test')
   assert.equal(adds.length, 1, 'one button per group')
   assert.match(textOf(adds[0]), /Add test/)
+})
+
+/* ---- the scan dialog ---- */
+
+// Reading the endpoints out of the source is a question about the whole project,
+// so it is a button in the case list's toolbar that opens a dialog — not a form
+// hidden behind "new case" that imports one endpoint per trip.
+await test('the toolbar scans the project, and the dialog imports what is ticked', async () => {
+  // The earlier tests leave the panel in the plan editor; the toolbar belongs to
+  // the case list, so walk back the way a reader does — the project crumb.
+  let tree = await settle(() => mainComponent({}))
+  const crumb = elementsOf(tree).find(
+    (node) =>
+      node.props &&
+      String(node.props.className || '').split(' ').includes('e2e-crumb') &&
+      /Record/.test(textOf(node)),
+  )
+  assert.ok(crumb, 'the breadcrumb leads back to the case list')
+  crumb.props.onClick()
+  const opened = await settle(() => mainComponent({}))
+  const scanButton = elementsOf(opened).find(
+    (node) =>
+      node.props &&
+      /\be2e-btn\b/.test(String(node.props.className || '')) &&
+      /Scan the project for endpoints/.test(textOf(node)),
+  )
+  assert.ok(scanButton, 'the case list toolbar carries the scan button')
+  scanButton.props.onClick()
+  const dialog = await settle(() => mainComponent({}))
+  const dialogText = textOf(dialog)
+  assert.match(dialogText, /Endpoints in this project/, 'the dialog names what it is showing')
+  assert.match(dialogText, /42 files/, 'the scan counts came from the Host')
+  assert.match(dialogText, /\/auth\/register/, 'the endpoints the scan found are listed')
+  assert.match(dialogText, /\/auth\/me/)
+
+  // Nothing ticked means nothing to import: the primary button says so by being off.
+  let dialogTree = dialog
+  const importButton = () =>
+    elementsOf(dialogTree).find(
+      (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /^Import \d+/.test(textOf(node)),
+    )
+  assert.equal(importButton().props.disabled, true, 'an empty tick list cannot import')
+
+  const rows = elementsOf(dialogTree).filter((node) => node.props && String(node.props.className || '').includes('e2e-scan-row'))
+  assert.equal(rows.length, 2, 'one row per endpoint')
+  const boxes = rows.map((row) => elementsOf(row).find((node) => node.type === 'input'))
+  boxes[0].props.onChange()
+  dialogTree = await settle(() => mainComponent({}))
+  assert.equal(importButton().props.disabled, false, 'a ticked row arms the import')
+  assert.match(textOf(dialogTree), /Import 1/, 'the button counts the ticks')
+
+  importButton().props.onClick()
+  await settle(() => mainComponent({}))
+  assert.ok(requested.includes('/import-endpoints'), 'the ticks became one import request')
+  const closed = await settle(() => mainComponent({}))
+  assert.equal(
+    elementsOf(closed).filter((node) => node.props && node.props.className === 'e2e-scan-backdrop').length,
+    0,
+    'the dialog closes once the import lands',
+  )
 })
 
 /* ---- the detail page: verdict card, tab strip, inspection rail ---- */

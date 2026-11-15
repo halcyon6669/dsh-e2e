@@ -1314,6 +1314,130 @@ await testAsync('a fresh registry file gets a header that explains the conventio
   assert.match(text, /env\.target/, 'the header names the convention cases will use')
 })
 
+section('import endpoints')
+
+// A little Spring project the scanner can read: one controller, one DTO.
+const IMPORT_ROOT = join(tmpDir, 'import-project')
+await mkdir(join(IMPORT_ROOT, 'src', 'main', 'resources'), { recursive: true })
+await mkdir(join(IMPORT_ROOT, 'src', 'main', 'java', 'demo'), { recursive: true })
+await writeFile(join(IMPORT_ROOT, 'src', 'main', 'resources', 'application.yml'), 'server:\n  port: 9555\n', 'utf8')
+await writeFile(
+  join(IMPORT_ROOT, 'src', 'main', 'java', 'demo', 'DemoController.java'),
+  [
+    'package demo;',
+    '',
+    'import org.springframework.web.bind.annotation.*;',
+    '',
+    '@RestController',
+    '@RequestMapping("/demo")',
+    'public class DemoController {',
+    '    @PostMapping("/ping")',
+    '    public String ping(@RequestBody PingDto body) { return "ok"; }',
+    '}',
+    '',
+  ].join('\n'),
+  'utf8',
+)
+await writeFile(
+  join(IMPORT_ROOT, 'src', 'main', 'java', 'demo', 'PingDto.java'),
+  ['package demo;', '', 'public class PingDto {', '    private String name;', '}', ''].join('\n'),
+  'utf8',
+)
+const IMPORT_CASES = join(tmpDir, 'import-cases')
+await mkdir(IMPORT_CASES, { recursive: true })
+await writeFile(
+  join(IMPORT_CASES, 'e2e.registry.yml'),
+  `targets:\n  demo:\n    baseUrl: http://127.0.0.1:9555\n    projectPath: ${IMPORT_ROOT.split('\\').join('/')}\n`,
+  'utf8',
+)
+const importPanel = createPanel({
+  ctx: { get: () => undefined },
+  config: { caseDir: IMPORT_CASES },
+  state: { dataDir: join(tmpDir, 'import-data') },
+})
+
+await testAsync('importing ticked endpoints writes one case each and refuses to overwrite one', async () => {
+  // The dialog ticks boxes; the Host writes files. One scan, one file per tick.
+  const first = await importPanel.importEndpoints({
+    endpoints: [{ method: 'POST', path: '/demo/ping' }],
+  })
+  assert.equal(first.written.length, 1, `expected one case written, got ${JSON.stringify(first.skipped)}`)
+  assert.equal(first.target, 'demo', 'the target came from the registry, not from the reader')
+  assert.ok(existsSync(first.written[0].path), 'the case file is on disk')
+  assert.ok(first.written[0].caseId, 'the panel assigned a case id')
+
+  // Second import of the same endpoint: the file stays as it is.
+  const second = await importPanel.importEndpoints({
+    endpoints: [{ method: 'POST', path: '/demo/ping' }],
+  })
+  assert.equal(second.written.length, 0, 'an existing case is never replaced')
+  assert.equal(second.skipped.length, 1)
+  assert.match(String(second.skipped[0].reason), /already there/)
+})
+
+await testAsync('an endpoint the scan cannot find is reported, not invented', async () => {
+  const result = await importPanel.importEndpoints({
+    endpoints: [{ method: 'GET', path: '/demo/does-not-exist' }],
+  })
+  assert.equal(result.written.length, 0)
+  assert.equal(result.skipped.length, 1)
+  assert.match(String(result.skipped[0].reason), /does not find it/)
+})
+
+await testAsync('importing with nothing ticked is refused, in the reader\'s words', async () => {
+  await assert.rejects(
+    () => importPanel.importEndpoints({ endpoints: [] }),
+    (error) => {
+      assert.ok(error instanceof PanelError)
+      assert.match(error.message, /no endpoints were picked to import/)
+      return true
+    },
+  )
+})
+
+section('delete a directory project')
+
+// A project card with no registry target is a directory. Deleting it is a file
+// operation, and the guard is that the directory must be one the panel owns —
+// never a path the caller made up.
+const DIR_CASES = join(tmpDir, 'dir-cases')
+await mkdir(DIR_CASES, { recursive: true })
+const dirPanel = createPanel({
+  ctx: { get: () => undefined },
+  config: { caseDir: DIR_CASES },
+  state: { dataDir: join(tmpDir, 'dir-data') },
+})
+
+await testAsync('a case sub-directory goes as a whole', async () => {
+  const sub = join(DIR_CASES, 'nightly')
+  await mkdir(sub, { recursive: true })
+  await writeFile(join(sub, 'a.yaml'), 'id: a\n', 'utf8')
+  await writeFile(join(sub, 'e2e.registry.yml'), 'targets: {}\n', 'utf8')
+  const result = await dirPanel.deleteProject({ kind: 'directory', name: `dir:${sub}` })
+  assert.equal(result.removedDir, sub)
+  assert.equal(existsSync(sub), false, 'the directory is gone')
+})
+
+await testAsync('the configured case root keeps the directory and loses only its cases', async () => {
+  await writeFile(join(DIR_CASES, 'one.yaml'), 'id: one\n', 'utf8')
+  const result = await dirPanel.deleteProject({ kind: 'directory', name: `dir:${DIR_CASES}` })
+  assert.equal(result.removedDir, null, 'the shared case root is not removed')
+  assert.equal(result.keptDir, DIR_CASES)
+  assert.equal(existsSync(DIR_CASES), true, 'the panel still has somewhere to save the next case')
+  assert.equal(existsSync(join(DIR_CASES, 'one.yaml')), false, 'its cases are gone')
+})
+
+await testAsync('a directory outside every case root is refused', async () => {
+  await assert.rejects(
+    () => dirPanel.deleteProject({ kind: 'directory', name: `dir:${tmpDir}` }),
+    (error) => {
+      assert.ok(error instanceof PanelError)
+      assert.match(error.message, /not inside a case directory/)
+      return true
+    },
+  )
+})
+
 section('yaml')
 
 // The panel once greeted the user with four "Invalid URL" warnings across the
