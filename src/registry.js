@@ -19,9 +19,9 @@
  * of making you retype a password you already stored once.
  */
 import { createDecipheriv } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { readYamlFile } from './yaml.js'
 
 export class RegistryError extends Error {
@@ -34,7 +34,7 @@ export class RegistryError extends Error {
 
 /** Names a case may put in `env.database` / `env.databases`. */
 const DATABASE_KEYS = new Set(['name', 'schema', 'description', 'from', 'id', 'kind', 'host', 'port', 'database', 'user', 'password', 'connectTimeoutMs', 'statementTimeoutMs'])
-const TARGET_KEYS = new Set(['projectPath', 'configurationPath', 'configurationName', 'baseUrl', 'healthPath', 'insecureTls', 'profile', 'startTimeoutMs', 'description'])
+const TARGET_KEYS = new Set(['projectPath', 'configurationPath', 'configurationName', 'baseUrl', 'healthPath', 'insecureTls', 'profile', 'startTimeoutMs', 'description', 'caseDir'])
 const REGISTRY_FILE_NAMES = ['e2e.registry.yml', 'e2e.registry.yaml']
 
 /**
@@ -287,6 +287,10 @@ export function resolveTarget(registry, name, options = {}) {
     name: name || null,
     source: source.__source || (name ? 'registry' : 'case'),
     projectPath: pick('projectPath') ? String(pick('projectPath')) : '',
+    // Where this project's cases live. Written by "create project"; a target
+    // that was typed by hand may not have one, and that is fine — the panel
+    // reads cases from every configured root anyway.
+    caseDir: pick('caseDir') ? String(pick('caseDir')) : '',
     configurationName: pick('configurationName') ? String(pick('configurationName')) : '',
     baseUrl: pick('baseUrl') ? String(pick('baseUrl')) : '',
     healthPath: pick('healthPath') ? String(pick('healthPath')) : null,
@@ -385,4 +389,114 @@ export async function describeDatabase(registry, name) {
     passwordConfigured: Boolean(resolved.password),
     description: entry && entry.description ? String(entry.description) : '',
   }
+}
+
+/**
+ * Appends one target to the registry file — the write side of "create project"
+ * in the panel.
+ *
+ * The registry is a hand-written file: it carries comments that explain why a
+ * target points where it points, and `${env:...}` lines the reader set up for
+ * portability. Re-serialising it would be legal YAML that lost all of that, so
+ * this is a text insertion, the same rule saveCase follows: find the
+ * `targets:` block, append one mapping at its indentation, touch nothing else.
+ * When no registry exists yet, a fresh one is written to the default case
+ * directory with a header that explains the two things a reader needs to know.
+ */
+export async function addTarget(input = {}) {
+  const { config = {}, caseDir } = input
+  const name = String(input.name || '').trim()
+  const baseUrl = String(input.baseUrl || '').trim()
+  if (!name) throw new RegistryError('a project needs a name')
+  if (!/^[a-z][a-z0-9-]*$/i.test(name)) {
+    throw new RegistryError(`project name "${name}" must start with a letter and use letters, digits and dashes only — it becomes the target name cases will write in env.target`)
+  }
+  if (!baseUrl) throw new RegistryError(`the project "${name}" needs a baseUrl — a project is, in the end, a service to test against`)
+  try { new URL(baseUrl) } catch { throw new RegistryError(`"${baseUrl}" is not a URL the panel can test against; give the scheme and host, like https://127.0.0.1:8443`) }
+
+  // Find the file to edit. The same candidates loadRegistry reads, in the same
+  // order — writing to anything else would make the panel and the runner
+  // disagree about which registry is real.
+  let file = null
+  for (const candidate of registryCandidates({ config, caseDir })) {
+    try {
+      await readFile(candidate)
+      file = candidate
+      break
+    } catch (error) {
+      if (error && error.code === 'ENOENT') continue
+      throw new RegistryError(`cannot read registry file ${candidate}: ${error.message}`)
+    }
+  }
+  const fresh = !file
+  if (fresh) file = join(caseDir || '.', REGISTRY_FILE_NAMES[0])
+  let text = ''
+  if (!fresh) text = await readFile(file, 'utf8')
+
+  // A name that already exists would silently shadow or be shadowed; say so
+  // instead. The check is textual so it sees the file exactly as it is.
+  if (new RegExp(`^[ \\t]*${name}[ \\t]*:`, 'm').test(text)) {
+    throw new RegistryError(`target "${name}" already exists in ${file}; pick another name for the project`, { file })
+  }
+
+  const lines = [
+    `  ${name}:`,
+    `    baseUrl: ${baseUrl}`,
+  ]
+  if (input.configurationName) lines.push(`    configurationName: ${String(input.configurationName)}`)
+  if (input.projectPath) lines.push(`    projectPath: ${String(input.projectPath).replace(/\\/g, '/')}`)
+  if (input.targetCaseDir) lines.push(`    caseDir: ${String(input.targetCaseDir).replace(/\\/g, '/')}`)
+  if (input.insecureTls) lines.push(`    insecureTls: true`)
+  const block = lines.join('\n')
+
+  let updated
+  const section = text.match(/^targets\s*:\s*$/m)
+  if (section) {
+    // Insert after the last mapping line of the targets block. A block ends at
+    // the first non-blank, non-indented, non-comment line — but trailing blank
+    // lines and comments usually belong to the *next* entry (its leading
+    // annotation), so the insertion point walks back over them. Writing in
+    // between a comment and the entry it describes would cut the file's own
+    // explanation in half.
+    const at = section.index
+    const head = text.slice(0, at)
+    const rest = text.slice(at)
+    const restLines = rest.split('\n')
+    let end = 1
+    let lastMapping = 1
+    while (end < restLines.length) {
+      const line = restLines[end]
+      if (line.trim() === '' || /^\s*#/.test(line)) { end += 1; continue }
+      if (/^[\t ]/.test(line)) { lastMapping = end + 1; end += 1; continue }
+      break
+    }
+    restLines.splice(lastMapping, 0, block)
+    updated = head + restLines.join('\n')
+  } else {
+    // No targets section — append one. A file that never had targets is often
+    // just databases; keep whatever is there untouched and add our own block.
+    const glue = text.endsWith('\n') || text === '' ? '' : '\n'
+    updated = `${text}${glue}\ntargets:\n${block}\n`
+  }
+
+  if (fresh) {
+    updated = [
+      '# Targets and databases for the e2e panel.',
+      '# A case only names them (env.target / env.database); the addresses and',
+      '# credentials live here. ${env:NAME:-fallback} expands with a default.',
+      '',
+      updated,
+    ].join('\n')
+  }
+
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
+  try {
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(tmp, updated, 'utf8')
+    await rename(tmp, file)
+  } catch (error) {
+    try { await unlink(tmp) } catch { /* nothing to clean */ }
+    throw new RegistryError(`cannot write ${file}: ${error.message}`)
+  }
+  return { name, baseUrl, file, created: fresh }
 }

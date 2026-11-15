@@ -257,7 +257,7 @@ const PROJECTS = {
 
 const BOOTSTRAP = {
   ok: true,
-  plugin: { version: '0.9.0', dataDir: 'C:\\data', mountedAt: '/plugins/e2e' },
+  plugin: { version: '0.10.0', dataDir: 'C:\\data', mountedAt: '/plugins/e2e' },
   caseDirs: ['C:\\cases'],
   cases: [{ dir: 'C:\\cases', cases: CASES, groups: [groupOf('Registration', CASES)], failures: [] }],
   registry: { file: 'C:\\cases\\e2e.registry.yml', targets: ['record-local'], databases: [], error: null },

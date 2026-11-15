@@ -1191,6 +1191,100 @@ await testAsync('${env:NAME} expands and keeps its fallback', async () => {
   assert.equal((await resolveDatabase(overridden, 'iam')).password, 'from-env')
 })
 
+section('create project')
+
+// The panel's createProject is the write side of "new project": it audits the
+// URL with the runner's own rules, writes one target into the registry as a
+// text insertion, and makes the case directory. These tests drive the panel so
+// the whole path is covered, not just addTarget in isolation.
+const PROJECT_ROOT = join(tmpDir, 'project-cases')
+await mkdir(PROJECT_ROOT, { recursive: true })
+const projectPanel = createPanel({
+  ctx: { get: () => undefined },
+  config: { caseDir: PROJECT_ROOT },
+  state: { dataDir: join(tmpDir, 'project-data') },
+})
+
+await testAsync('creating a project writes the registry, makes the directory, and returns both', async () => {
+  const result = await projectPanel.createProject({ name: 'shop', baseUrl: 'https://127.0.0.1:9443' })
+  assert.equal(result.name, 'shop')
+  assert.equal(result.caseDir, join(PROJECT_ROOT, 'shop'))
+  assert.ok(existsSync(join(PROJECT_ROOT, 'shop')), 'the case directory exists')
+  const registry = await readFile(result.registryFile, 'utf8')
+  assert.match(registry, /^targets:\n  shop:\n    baseUrl: https:\/\/127\.0\.0\.1:9443\n/m, 'the target block reads like hand-written YAML')
+})
+
+await testAsync('a second project joins the targets block without touching anything else', async () => {
+  const before = await readFile(join(PROJECT_ROOT, 'e2e.registry.yml'), 'utf8')
+  const result = await projectPanel.createProject({ name: 'blog', baseUrl: 'https://127.0.0.1:9444' })
+  const after = await readFile(result.registryFile, 'utf8')
+  assert.ok(after.startsWith(before.split('targets:')[0]), 'text above the targets block moved')
+  assert.match(after, /  blog:\n    baseUrl: https:\/\/127\.0\.0\.1:9444/, 'the new target is in the block')
+  assert.equal(after.includes('shop:'), true, 'the first project survived')
+  const order = ['shop:', 'blog:'].map((marker) => after.indexOf(marker))
+  assert.ok(order[0] < order[1], 'targets are appended, not prepended')
+})
+
+await testAsync('a comment above the targets block survives the insertion', async () => {
+  const file = join(PROJECT_ROOT, 'e2e.registry.yml')
+  const current = await readFile(file, 'utf8')
+  await writeFile(file, current.replace('targets:', '# the services we test against\ntargets:'), 'utf8')
+  const result = await projectPanel.createProject({ name: 'admin', baseUrl: 'https://127.0.0.1:9445' })
+  const after = await readFile(result.registryFile, 'utf8')
+  assert.match(after, /# the services we test against/, 'the comment was thrown away')
+})
+
+await testAsync('the same origin twice is one service described twice, and is refused', async () => {
+  await assert.rejects(
+    () => projectPanel.createProject({ name: 'shop-two', baseUrl: 'https://127.0.0.1:9443' }),
+    (error) => {
+      assert.ok(error instanceof PanelError)
+      assert.match(error.message, /already exists/)
+      return true
+    },
+  )
+})
+
+await testAsync('a production-looking URL is refused at creation, with the runner\'s words', async () => {
+  await assert.rejects(
+    () => projectPanel.createProject({ name: 'live', baseUrl: 'https://prod.example.com' }),
+    (error) => {
+      assert.match(error.message, /production endpoint/)
+      return true
+    },
+  )
+})
+
+await testAsync('a public URL needs allowRemote, with the runner\'s words', async () => {
+  await assert.rejects(
+    () => projectPanel.createProject({ name: 'staging', baseUrl: 'https://198.51.100.7' }),
+    (error) => {
+      assert.match(error.message, /not loopback or a private address/)
+      return true
+    },
+  )
+  const result = await projectPanel.createProject({ name: 'staging', baseUrl: 'https://198.51.100.7', allowRemote: true })
+  assert.equal(result.name, 'staging')
+})
+
+await testAsync('a name with spaces is slugged, because the slug is the target name', async () => {
+  const result = await projectPanel.createProject({ name: 'my shop', baseUrl: 'https://127.0.0.1:9446' })
+  assert.equal(result.name, 'my-shop', 'the slug is what cases will write in env.target')
+  const registry = await readFile(result.registryFile, 'utf8')
+  assert.match(registry, /  my-shop:\n/, 'the slug, not the display name, lands in the registry')
+})
+
+await testAsync('a fresh registry file gets a header that explains the conventions', async () => {
+  const freshRoot = join(tmpDir, 'project-fresh')
+  await mkdir(freshRoot, { recursive: true })
+  const freshPanel = createPanel({ ctx: { get: () => undefined }, config: { caseDir: freshRoot }, state: { dataDir: join(tmpDir, 'project-fresh-data') } })
+  const result = await freshPanel.createProject({ name: 'solo', baseUrl: 'https://127.0.0.1:9447' })
+  assert.equal(result.created, true)
+  const text = await readFile(result.registryFile, 'utf8')
+  assert.match(text, /^# /, 'the file starts with a comment, not bare YAML')
+  assert.match(text, /env\.target/, 'the header names the convention cases will use')
+})
+
 section('yaml')
 
 // The panel once greeted the user with four "Invalid URL" warnings across the

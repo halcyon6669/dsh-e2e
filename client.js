@@ -29,7 +29,6 @@ window.__ModuleLoader__.load({
     const DICT = {
       en: {
         'panel.title': 'End-to-end tests',
-        'panel.subtitle': 'Run a real case against a real service: it starts, the request goes out, the database is read back, and every claim comes with evidence.',
 
         'action.refresh': 'Refresh',
         'action.new': 'New case',
@@ -238,13 +237,22 @@ window.__ModuleLoader__.load({
         'label.env': 'ENV',
         'label.origin': 'ORIGIN',
         'label.suite': 'SUITE',
-        'label.suiteAll': 'ALL',
         'nav.tab.cases': 'Cases',
         'nav.tab.detail': 'Evidence',
         'nav.tab.plan': 'Test plan',
         'action.runSelected': 'Run selected',
         'action.runFullRegression': 'Run full regression',
         'action.refreshScan': 'Refresh scan',
+        'action.createProject': 'Create project',
+        'action.create': 'Create',
+        'action.creating': 'Creating…',
+        'notice.projectCreated': 'Project {name} created. Cases live in {dir}; new cases will name it in env.target.',
+        'field.projectName': 'Project name (letters, digits, dashes)',
+        'field.baseUrl': 'Base URL, like https://127.0.0.1:8443',
+        'field.projectPath': 'Project path (optional)',
+        'field.configurationName': 'Run configuration (optional)',
+        'label.allowRemote': 'Remote host',
+        'label.allowRemoteHint': 'The host is not loopback or a private address; check only when testing a remote machine.',
         'label.diagnostic': 'Diagnostics',
         'label.actions': 'Actions',
         'label.selectCase': 'Select this case',
@@ -274,7 +282,6 @@ window.__ModuleLoader__.load({
       },
       zh: {
         'panel.title': '端到端测试',
-        'panel.subtitle': '在真实服务上跑真实用例：服务启动、请求发出、数据库读回，每个结论都带证据。',
 
         'action.refresh': '刷新',
         'action.new': '新建用例',
@@ -479,13 +486,22 @@ window.__ModuleLoader__.load({
         'label.env': '环境',
         'label.origin': 'ORIGIN',
         'label.suite': 'SUITE',
-        'label.suiteAll': '全部',
         'nav.tab.cases': '项目与用例清单',
         'nav.tab.detail': '用例详情与证据',
         'nav.tab.plan': '测试计划编辑',
         'action.runSelected': '运行选中用例',
         'action.runFullRegression': '执行全量回归',
         'action.refreshScan': '刷新扫描',
+        'action.createProject': '创建项目',
+        'action.create': '创建',
+        'action.creating': '创建中…',
+        'notice.projectCreated': '项目 {name} 已创建。用例放在 {dir}；新用例会在 env.target 里写它的名字。',
+        'field.projectName': '项目名（字母、数字、短横线）',
+        'field.baseUrl': 'Base URL，如 https://127.0.0.1:8443',
+        'field.projectPath': '项目路径（可选）',
+        'field.configurationName': '运行配置（可选）',
+        'label.allowRemote': '远程主机',
+        'label.allowRemoteHint': '目标不是本机或内网地址；只在测试远程机器时勾选。',
         'label.diagnostic': '诊断与异常',
         'label.actions': '操作',
         'label.selectCase': '选中这条用例',
@@ -2405,7 +2421,9 @@ window.__ModuleLoader__.load({
       const [allowWrites, setAllowWrites] = React.useState(false)
       const [keepRunning, setKeepRunning] = React.useState(false)
       const [explaining, setExplaining] = React.useState(false)
-      const [creating, setCreating] = React.useState(null) // draft file name
+      const [creating, setCreating] = React.useState(null) // 'project' on the landing page, a draft file name inside one
+      // The create-project form's draft. Reset whenever the form closes.
+      const [projectDraft, setProjectDraft] = React.useState({ name: '', baseUrl: '', projectPath: '', configurationName: '', allowRemote: false })
       const [reportText, setReportText] = React.useState(null)
       // Where a freshly generated document will be saved. Kept outside `selected`
       // because a generated case has no file on disk yet.
@@ -2860,6 +2878,25 @@ window.__ModuleLoader__.load({
         }
       }
 
+      // Creating a project writes the registry and makes a case directory on the
+      // Host; the panel then refreshes so the new card is on the table. The name
+      // the reader typed becomes the target name cases write in `env.target`,
+      // which is why it is validated there and echoed here.
+      const createProject = async () => {
+        setBusy('create')
+        try {
+          const result = await apiPost('/project', projectDraft)
+          setNotice({ message: t('notice.projectCreated', { name: result.name, dir: result.caseDir }) })
+          setCreating(null)
+          setProjectDraft({ name: '', baseUrl: '', projectPath: '', configurationName: '', allowRemote: false })
+          await refresh()
+        } catch (error) {
+          setNotice({ isError: true, message: error.message })
+        } finally {
+          setBusy(null)
+        }
+      }
+
       // Poll a live batch the same way a single run is polled: the Host owns the
       // loop, so closing the page does not stop the run.
       const batchId = batch && batch.id
@@ -2956,33 +2993,45 @@ window.__ModuleLoader__.load({
                   t('action.runFullRegression'),
                 ),
               ]
-            : null,
+            : h(
+                Btn,
+                { key: 'create', small: true, primary: true, onClick: () => setCreating((current) => (current === 'project' ? '' : 'project')) },
+                t('action.createProject'),
+              ),
         ),
-        h(
-          'nav',
-          { className: 'e2e-topnav-tabs' },
-          navTabs.map((tab) =>
-            tab.on
-              ? h('button', { key: tab.key, type: 'button', className: 'e2e-topnav-tab is-active' }, tab.label)
-              : h(
-                  'button',
-                  {
-                    key: tab.key,
-                    type: 'button',
-                    className: 'e2e-topnav-tab',
-                    onClick: () => {
-                      if (tab.key === 'cases') {
-                        if (project) setView('cases')
-                        else setOpenProject(null)
-                      }
-                    },
-                  },
-                  tab.label,
-                ),
-          ),
-          h('div', { className: 'e2e-spacer' }),
-          h('span', { className: 'e2e-topnav-suite' }, t('label.suite'), ': ', project ? project.name : t('label.suiteAll')),
-        ),
+        // The tab row and the suite indicator only mean something once a project
+        // is open: on the landing page they are chrome without content, which is
+        // what the reader asked to see removed.
+        project
+          ? h(
+              'nav',
+              { className: 'e2e-topnav-tabs' },
+              navTabs.map((tab) =>
+                tab.on
+                  ? h('button', { key: tab.key, type: 'button', className: 'e2e-topnav-tab is-active' }, tab.label)
+                  : h(
+                      'button',
+                      {
+                        key: tab.key,
+                        type: 'button',
+                        className: 'e2e-topnav-tab',
+                        onClick: () => {
+                          if (tab.key === 'cases') {
+                            if (project) setView('cases')
+                            else setOpenProject(null)
+                          }
+                        },
+                      },
+                      tab.label,
+                    ),
+              ),
+              h('div', { className: 'e2e-spacer' }),
+              h('span', { className: 'e2e-topnav-suite' }, t('label.suite'), ': ', project.name),
+            )
+          : null,
+        // The breadcrumbs carry the way back and the way between views, and the
+        // "new case" button. They only exist once a project is open; the landing
+        // page replaces them with the create-project form instead.
         project
           ? h(
               'div',
@@ -3037,7 +3086,57 @@ window.__ModuleLoader__.load({
                 t('action.new'),
               ),
             )
-          : h('p', { className: 'e2e-subtitle' }, t('panel.subtitle')),
+          : null,
+        // On the landing page the subtitle line is the create-project form. It
+        // occupies the strip the reader just asked to be quieter: the same
+        // height, now earning it.
+        !project && creating === 'project'
+          ? h(
+              'div',
+              { className: 'e2e-crumbs e2e-project-create' },
+              h('input', {
+                className: 'e2e-input e2e-project-field',
+                placeholder: t('field.projectName'),
+                value: projectDraft.name,
+                onChange: (event) => setProjectDraft({ ...projectDraft, name: event.target.value }),
+              }),
+              h('input', {
+                className: 'e2e-input e2e-project-field is-wide',
+                placeholder: t('field.baseUrl'),
+                value: projectDraft.baseUrl,
+                onChange: (event) => setProjectDraft({ ...projectDraft, baseUrl: event.target.value }),
+              }),
+              h('input', {
+                className: 'e2e-input e2e-project-field is-wide',
+                placeholder: t('field.projectPath'),
+                value: projectDraft.projectPath,
+                onChange: (event) => setProjectDraft({ ...projectDraft, projectPath: event.target.value }),
+              }),
+              h('input', {
+                className: 'e2e-input e2e-project-field',
+                placeholder: t('field.configurationName'),
+                value: projectDraft.configurationName,
+                onChange: (event) => setProjectDraft({ ...projectDraft, configurationName: event.target.value }),
+              }),
+              h(
+                'label',
+                { className: 'e2e-project-remote', title: t('label.allowRemoteHint') },
+                h('input', {
+                  type: 'checkbox',
+                  checked: projectDraft.allowRemote,
+                  onChange: (event) => setProjectDraft({ ...projectDraft, allowRemote: event.target.checked }),
+                }),
+                t('label.allowRemote'),
+              ),
+              h('div', { className: 'e2e-spacer' }),
+              h(Btn, { small: true, onClick: () => setCreating('') }, t('action.cancel')),
+              h(
+                Btn,
+                { small: true, primary: true, disabled: busy === 'create', onClick: createProject },
+                busy === 'create' ? t('action.creating') : t('action.create'),
+              ),
+            )
+          : null,
       )
 
       if (boot.status === 'loading') {

@@ -14,15 +14,15 @@
  *   3. The API answers the same shapes the tools do, so the panel and the agent
  *      never disagree about what a run produced.
  */
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadCaseFile, CaseError, withCaseId } from './case.js'
 import { runCase, redactReport } from './runner.js'
 import { renderSummary } from './report.js'
-import { checkTargets } from './guard.js'
+import { auditBaseUrl, checkTargets } from './guard.js'
 import { resolveEnvironment, describeEnvironment } from './resolve.js'
-import { loadRegistry, describeDatabase, knownNames, resolveTarget, RegistryError } from './registry.js'
+import { loadRegistry, describeDatabase, knownNames, resolveTarget, addTarget, RegistryError } from './registry.js'
 import { generateCase, explainFailure, GenerateError } from './ai.js'
 import { listProjects } from './projects.js'
 import { describeSteps, hasAssertions } from './plan.js'
@@ -699,6 +699,50 @@ export function createPanel({ ctx, config = {}, state }) {
     return result
   }
 
+  /**
+   * Create a project: one registry target, one case directory. The project is
+   * not a row in a database — it is the thing a case names in `env.target`,
+   * and the directory its YAML lives in — so creating it means writing the
+   * registry (text insertion, comments preserved) and making the directory.
+   * The same base-URL rules a run applies are applied here, so a project that
+   * would fail every case cannot be born.
+   */
+  async function createProject(input = {}) {
+    const name = String(input.name || '').trim()
+    const baseUrl = String(input.baseUrl || '').trim()
+    const problems = auditBaseUrl(baseUrl, { allowRemote: input.allowRemote === true })
+    if (problems.length > 0) throw new PanelError(`the project was refused: ${problems.join('; ')}`, 422, { problems })
+    const root = roots()[0] || defaultCaseDir({ state })
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'project'
+    // A second project aimed at the same service is two registries describing
+    // one thing; the panel would show both rows for every run.
+    const existing = await loadRegistry({ config, caseDir: root, env: process.env })
+    for (const [existingName, target] of Object.entries(existing.targets)) {
+      let origin = null
+      try { origin = new URL(target.baseUrl || '').origin } catch { /* malformed stays theirs */ }
+      if (origin && origin === new URL(baseUrl).origin) {
+        throw new PanelError(`a project for ${origin} already exists: ${existingName}; one service, one project`, 422, { origin, existingName })
+      }
+    }
+    const caseDir = join(root, slug)
+    await mkdir(caseDir, { recursive: true })
+    const written = await addTarget({
+      name: slug,
+      baseUrl,
+      configurationName: input.configurationName,
+      projectPath: input.projectPath,
+      targetCaseDir: caseDir,
+      insecureTls: input.insecureTls === true,
+      config,
+      caseDir: root,
+    })
+    state.lastCaseDir = root
+    return { ok: true, name: slug, baseUrl, registryFile: written.file, caseDir, created: written.created }
+  }
+
   async function generate(input = {}) {
     const dirs = roots()
     let targets = []
@@ -774,6 +818,7 @@ export function createPanel({ ctx, config = {}, state }) {
     } },
     { method: 'GET', path: '/reports', handler: async () => listReports({ config, state }) },
     { method: 'GET', path: '/projects', handler: async () => listProjects({ config, state, env: process.env }) },
+    { method: 'POST', path: '/project', mutate: true, handler: async (body) => createProject(body) },
     {
       method: 'GET',
       path: '/shot',
@@ -985,6 +1030,7 @@ export function createPanel({ ctx, config = {}, state }) {
     validateCase,
     startBatch,
     batchStatus,
+    createProject,
     dispose() {
       runs.clear()
       batches.clear()

@@ -510,9 +510,35 @@ const landing = await settle(() => mainComponent({}))
 const landingText = textOf(landing)
 
 await test('the landing view is the project table', () => {
-  assert.match(landingText, /Cases/, 'the view should name itself')
+  // The tab row is inside the project now, so the landing page is named by its
+  // bar and its cards, not by a tab.
   assert.match(landingText, /Record/)
   assert.match(landingText, /shop-web/)
+})
+
+await test('the landing page offers to create a project, and the form appears in the header strip', async () => {
+  const create = elementsOf(landing).find(
+    (node) =>
+      node.props &&
+      ['e2e-btn'].some((name) => String(node.props.className || '').split(' ').includes(name)) &&
+      textOf(node).includes('Create project'),
+  )
+  assert.ok(create, 'expected a create-project button on the landing page')
+  create.props.onClick()
+  // The form is rendered by the next render pass, not the captured tree.
+  const opened = await settle(() => mainComponent({}))
+  const inputs = elementsOf(opened).filter(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'),
+  )
+  assert.ok(inputs.length >= 4, `expected the name, the URL, the path and the configuration fields, found ${inputs.length}`)
+  assert.match(textOf(opened), /Remote host/, 'the allowRemote checkbox is labelled')
+  const submit = elementsOf(opened).find(
+    (node) =>
+      node.props &&
+      ['e2e-btn'].some((name) => String(node.props.className || '').split(' ').includes(name)) &&
+      textOf(node).trim() === 'Create',
+  )
+  assert.ok(submit, 'the form has its own create button')
 })
 
 await test('results render as counts, not one summary word', () => {

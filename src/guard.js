@@ -53,6 +53,27 @@ function looksLikeProduction(value) {
 }
 
 /**
+ * The same base-URL rules checkTargets applies to a run, applied to a project
+ * the panel is about to create. The wordings are verbatim the runner's, so a
+ * refusal at creation time and a refusal at run time read as one voice — a
+ * project that would fail every case should not be creatable without a fight.
+ * Returns the problems; an empty array means the URL passed.
+ */
+export function auditBaseUrl(baseUrl, { allowRemote = false } = {}) {
+  const problems = []
+  const host = hostOf(baseUrl)
+  if (!baseUrl) problems.push('the project has no base URL: a project is, in the end, a service to test against')
+  else if (!host) problems.push(`the target base URL is not a URL: ${baseUrl}`)
+  else if (!allowRemote && !ALLOWED_HOST_PATTERNS.some((pattern) => pattern.test(host))) {
+    problems.push(`the target points at ${host}, which is not loopback or a private address (pass allowRemote to override)`)
+  }
+  if (looksLikeProduction(baseUrl)) {
+    problems.push(`the target base URL looks like a production endpoint: ${baseUrl}`)
+  }
+  return problems
+}
+
+/**
  * Validates everything a run is about to touch. `allowRemote` exists for the rare
  * case of a shared test server; it still rejects production-looking names.
  *
