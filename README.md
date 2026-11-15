@@ -338,6 +338,14 @@ dump 语法上无损，信息上有损：注释、空行、引号风格、字段
 
 一次真实运行要启动 JVM、轮询就绪、连库、收日志——挂在 HTTP 请求上会让面板卡住，而且浏览器一走请求就断。所以 `POST /run` 立刻返回 run id，前端按 900ms 轮询状态。
 
+### 为什么 YAML 解析器不用 `import.meta.url` 拼路径
+
+第一版是 `import(new URL('../vendor/js-yaml.mjs', import.meta.url).href)`。在 `import.meta.url` 是 `file:` URL 时它没问题；不是的时候（裸路径、`data:`、`node:`，或者正斜杠盘符 `C:/…`）它会抛 `TypeError: Invalid URL`——消息里既没有那个基址，也没有那个相对路径。
+
+代价一次付清：插件里所有 YAML 都走这一个入口，所以 registry、每个用例、项目列表同时失败，首页显示四行一模一样的 `Invalid URL`，一行也说不出是谁在抱怨。而正斜杠盘符那种更坏：`new URL` 不抛错，把 `C:` 当协议，静默指向 `c:/pkg/vendor/js-yaml.mjs`。
+
+现在从 `import.meta.dirname`（再退到 `fileURLToPath`、`isAbsolute`、`process.cwd()`）逐级取目录，**只有 `file:` 才允许当 URL 基址**，全部失败时把试过的候选一条条列出来。`/status` 也多了一个 `yaml` 字段，直接回答「解析器现在能不能用」——这类「整个面板一起坏」的故障应该有一个地方一次说清，而不是摊成 N 条文件级黄条。
+
 ## 七个工具
 
 | 工具 | 用途 |
@@ -449,6 +457,7 @@ src/scan.js           读 Spring 源码：端点、DTO 字段与约束、实体�
 src/scaffold.js       端点 → 用例骨架（不含断言）
 src/tools.js          7 个工具注册
 src/case.js           YAML 解析与规范化
+src/yaml.js           解析器的定位与加载（不信任 import.meta.url，失败时列出候选）
 src/registry.js       target / 数据库注册表 + dsh-db-mcp 导入
 src/resolve.js        用例 + registry → 实际连接
 src/guard.js          环境护栏（默认拒绝，校验解析后的地址，含 browser.url）

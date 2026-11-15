@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { createTools } from './tools.js'
 import { createPanel, PLUGIN_VERSION } from './panel.js'
 import { caseRoots } from './store.js'
+import { parseYaml, parserCandidates } from './yaml.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const EXAMPLES = join(HERE, '..', 'examples')
@@ -282,6 +283,27 @@ export async function createHost({ dir, config = {}, ctx }) {
 
   const clientNudge = await nudgeClientScan()
 
+  /**
+   * Answers "can the plugin still read its own YAML?" on demand.
+   *
+   * When the parser cannot be located, the registry, every case file and the
+   * project list all fail together with whatever message the parser raised — which
+   * is how four "Invalid URL" warnings came to be the first thing the panel showed.
+   * A single startup fact would have said it once, in one place.
+   */
+  async function yamlStatus() {
+    try {
+      const value = await parseYaml('probe: 1', '<status>')
+      return { ok: value !== null && typeof value === 'object' && value.probe === 1, file: parserCandidates()[0] || null }
+    } catch (error) {
+      return {
+        ok: false,
+        error: String((error && error.message) || error),
+        tried: parserCandidates(),
+      }
+    }
+  }
+
   async function handle(request, response) {
     const url = new URL(request.url || '/', 'http://localhost')
     const path = url.pathname.replace(/^\/plugins\/e2e\/api/, '') || '/'
@@ -301,6 +323,7 @@ export async function createHost({ dir, config = {}, ctx }) {
           idePort: config.idePort || 64342,
           ideHost: config.ideHost || '127.0.0.1',
           dataDir: dir,
+          yaml: await yamlStatus(),
           client: clientStatus(),
           clientNudge,
           clientDiagnostics: clientDiagnostics(),

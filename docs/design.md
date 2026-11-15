@@ -121,10 +121,10 @@
 | 文件 | 行数 | 职责 | 关键设计决策 |
 |---|---|---|---|
 | `index.js` | 150 | 插件入口，`apply(ctx, config)` | 模块解析钩子给整棵依赖图加 generation，改任何 `src/*.js` 都不必重启 DSH |
-| `client.js` | 3596 | 浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划 + 侧栏入口 | 纯手写 bundle，React 来自宿主模块表，见 §16 |
-| `src/host.js` | 323 | 组装、示例播种、`/status`、客户端半自检 | 面板首次打开不能是空目录，见 §16.1 |
-| `src/panel.js` | 992 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
-| `src/store.js` | 319 | 用例与报告的唯一磁盘入口 | 路径必须落在 root 内，见 §16.2 |
+| `client.js` | 3599 | 浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划 + 侧栏入口 | 纯手写 bundle，React 来自宿主模块表，见 §16 |
+| `src/host.js` | 347 | 组装、示例播种、`/status`、客户端半自检 | 面板首次打开不能是空目录，见 §16.1 |
+| `src/panel.js` | 993 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
+| `src/store.js` | 321 | 用例与报告的唯一磁盘入口 | 路径必须落在 root 内，见 §16.2 |
 | `src/projects.js` | 397 | 项目表：按 origin 归并 target、汇总最近结果与分组 | 不存储、只推导；见 §5.10 |
 | `src/plan.js` | 155 | 步骤描述、状态判定、组内结论 | 纯函数，Host 算一次浏览器不重算；见 §5.11 |
 | `src/edit.js` | 252 | 表单 → YAML 的行级补丁 | 不重新序列化，见 §5.12 |
@@ -134,9 +134,9 @@
 | `src/tools.js` | 524 | 注册 7 个工具 | 与面板共用 store，不重复实现 |
 | `src/case.js` | 850 | YAML 解析与规范化 | 未知字段直接报错（见 §5.4） |
 | `src/registry.js` | 388 | target / 数据库注册表 | 支持 `from: db-mcp` 复用已存数据源，见 §5.7 |
-| `src/resolve.js` | 156 | 用例 + registry → 实际连接 | 三层合并，缺配置时列出可用名字 |
+| `src/resolve.js` | 157 | 用例 + registry → 实际连接 | 三层合并，缺配置时列出可用名字 |
 | `src/guard.js` | 219 | 环境护栏 | 校验解析后的地址（见 §9） |
-| `src/runner.js` | 727 | 流水线编排 | `finally` 保证 teardown 与停服 |
+| `src/runner.js` | 729 | 流水线编排 | `finally` 保证 teardown 与停服 |
 | `src/browser.js` | 538 | CDP 客户端：起 Chrome、按步骤操作、截图 | 零依赖 WebSocket，见 §5.16 |
 | `src/service.js` | 270 | 启停服务、跟随日志 | 端口占用预检（见 §6.2） |
 | `src/idea.js` | 274 | IDEA MCP 客户端 | 手写 SSE + JSON-RPC，不引依赖 |
@@ -145,9 +145,9 @@
 | `src/db.js` | 148 | 数据库门面 | 强制只读断言 |
 | `src/assert.js` | 253 | 断言引擎 | 每条断言返回统一结构（见 §7.2） |
 | `src/report.js` | 383 | 报告渲染 | 双格式：JSON + Markdown |
-| `src/yaml.js` + `vendor/js-yaml.mjs` | 42 + 104KB | YAML 解析与输出 | 内置 vendor，见 §4.2 |
+| `src/yaml.js` + `vendor/js-yaml.mjs` | 134 + 104KB | YAML 解析与输出 | 内置 vendor；不信任 `import.meta.url`（见 §11.18） |
 
-合计 **12,686 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
+合计 **12,811 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
 
 `client.js` 涨得最快，而它没有任何编译期检查：`node --check` 只看语法，看不见一个改了名却没跟着改的变量。这就是 `dev/render.test.mjs` 存在的原因（§17），也是为什么前端每加一个页面都要同时加渲染探针。
 
@@ -1277,6 +1277,49 @@ fatal: ReferenceError: index is not defined
 
 ---
 
+### 11.18 一条 `Invalid URL` 打垮整个首页
+
+用户报的第四类 bug 只有半句话：「首页直接报错了。」截图里是四条黄条加一句空态：
+
+```
+the registry could not be read: C:\Users\administor-\.dsh\e2e\cases\e2e.registry.yml: Invalid URL
+auth-confirm-code.yaml does not load: Invalid URL
+auth-register.yaml does not load: Invalid URL
+post-auth-confirmcode.yaml does not load: Invalid URL
+还没有项目。用例引用了 target，或者某个用例目录里有用例，项目就会出现在这里。
+```
+
+四条不同的文件，同一个词，没有一个说得出是谁在抱怨。
+
+原因是全插件只有一个 YAML 入口，而它的第一行是：
+
+```js
+modulePromise = import(new URL('../vendor/js-yaml.mjs', import.meta.url).href)
+```
+
+`new URL(relative, base)` 在 `base` 不能当基址时抛 `TypeError: Invalid URL`，消息里**不含**这个 `base`，也不含那个相对路径。三种会踩的形状：
+
+| `import.meta.url` 的形状 | `new URL(rel, url)` | 结果 |
+|---|---|---|
+| `file:///C:/pkg/src/yaml.js` | 正常 | 找到解析器 |
+| `C:\pkg\src\yaml.js`（裸路径） | 抛错 | `Invalid URL` |
+| `C:/pkg/src/yaml.js`（正斜杠） | **不抛错** | 把盘符当协议，静默解析成 `c:/pkg/vendor/js-yaml.mjs` |
+| `data:` / `node:` / 空串 / `undefined` | 抛错 | `Invalid URL` |
+
+第三行比第一行更坏：它不报错，只是安静地指向一个不存在的文件。
+
+修法三条：
+
+1. **不再向 `import.meta.url` 要答案。** `import.meta.dirname` → `fileURLToPath(url)`（仅 `file:`）→ `isAbsolute(url)` 时当真路径用 `dirname()` → `process.cwd()`，逐级尝试；`new URL` 只在这一步失败时被跳过，而不是当作唯一路径。
+2. **只让 `file:` 当基址。** 正斜杠盘符那种「不抛错但解析错」的情况，靠「先用 `startsWith('file:')` 拦一遍」解决——错误候选比没有候选更危险，因为它排在正确候选前面。
+3. **失败时说清试过哪些。** `the YAML parser could not be loaded from vendor/js-yaml.mjs; tried: …` 一行一条。同一个启动期意外，好过每次请求一个谜语。
+
+同时给 `/status` 加了 `yaml` 字段（`parseYaml('probe: 1')` 跑通与否 + 实际用的文件 + 试过的候选列表）。这类「整个面板一起坏」的故障，应该有一个地方一次说清，而不是摊成 N 条文件级黄条。
+
+> 一条说不出主语的错误，会让人去读 N 个无辜的文件。
+
+---
+
 ## 12. 真机验证记录
 
 两个示例用例都在真实环境跑通了完整链路：真实 IDEA（`RecordApplication` 运行配置）、真实 Spring Boot 服务（`https://127.0.0.1:8443`）、真实 PostgreSQL 15（`iam_db`）。
@@ -1640,6 +1683,49 @@ clientFile: statSync(join(HERE, '..', 'client.js')).size,
 
 ---
 
+### 12.14 首页 `Invalid URL`：复现、修复、验证
+
+用户报「首页直接报错了」之后，先做的事不是重启，是**确认这条消息只能来自哪里**。全插件有 17 处 `new URL(`，但只有 `src/yaml.js` 那一处会被 registry 和三个用例共享：
+
+```
+registry ok [ 'targets', 'databases', 'file', 'sources', 'env' ]    ← 正常 import 路径
+case ok CC-001                                                      ← 正常 import 路径
+```
+
+两条都通过，说明「代码本身没问题」，问题在**加载环境**。于是直接问 Node：`new URL` 在哪些基址下会抛：
+
+```
+new URL(rel, undefined)  -> TypeError: Invalid URL
+new URL(rel, '')         -> TypeError: Invalid URL
+new URL(rel, 'node:fs')  -> TypeError: Invalid URL
+new URL(rel, 'data:...') -> TypeError: Invalid URL
+new URL(rel, 'C:\pkg\src\yaml.js') -> TypeError: Invalid URL
+new URL(rel, 'C:/pkg/src/yaml.js') -> c:/pkg/vendor/js-yaml.mjs   ← 不抛错，解析错
+```
+
+最后一行是这次修复真正的重点：它不报错。
+
+修完后真机确认：
+
+```
+POST /plugins/e2e/api/reload → {"ok":true,"generation":9,"tools":[...7 个...]}
+GET  /plugins/e2e/api/status → yaml: { ok: true, file: "file:///.../dsh-e2e/vendor/js-yaml.mjs" }
+GET  /plugins/e2e/api/bootstrap → version 0.7.1, cases 3, groups 2, failures [], registry.error null
+GET  /plugins/e2e/api/projects  → warnings [], Record {total:3, passed:1, failed:2}
+```
+
+首页从「四条黄条 + 空态」恢复到三个用例、两组、一个项目。
+
+新增的 5 条单测（`dev/unit.test.mjs` 的 `section('yaml')`，90 → 95 passed）覆盖的正是上面那张表的每一行，其中两条专门盯「不抛错但解析错」这种：
+
+- `a drive-letter path is never used as a URL base`：断言候选列表里不存在 `c:/…` 开头的项。
+- `a Windows path yields its directory, not a bogus URL`：裸反斜杠路径必须产出 `file:///C:/pkg/vendor/js-yaml.mjs`。
+
+**这次修复没有真机复现原始故障**，因为线上 Host 一旦 reload 就换成了新代码，而触发条件（loader 用非 `file:` 基址实例化模块）在这台机器上无法稳定制造。已验证的是：修后的代码在所有已知坏基址下都能找到解析器（单测），以及线上面板恢复正常（真机）。原故障的触发路径本身属于 DSH 内部，记录在案而不是猜。
+
+---
+
+
 ## 13. 工具接口
 
 注册了 7 个工具。它们和面板共用 `store.js`，所以两边看到的用例列表、报告列表完全一致。
@@ -1745,7 +1831,7 @@ clientFile: statSync(join(HERE, '..', 'client.js')).size,
 
 | 方法 | 路径 | 作用 |
 |---|---|---|
-| GET | `/status` | 插件状态、工具名、用例目录、`client.registered` |
+| GET | `/status` | 插件状态、工具名、用例目录、`client.registered`，以及 `yaml`（解析器能否加载、用的哪个文件，见 §11.18） |
 | GET | `/bootstrap` | 一次拿全：用例（含 `groups`）、registry、报告、IDE 设置 |
 | GET | `/cases` | 用例列表 |
 | GET | `/case?file=` | 读一个用例（含原始 YAML、四个描述字段、表单初值，以及 `history`——这个用例在磁盘上的报告清单，见 §5.14） |
@@ -1814,7 +1900,7 @@ dsh-e2e/
 │   ├── db.js                数据库门面
 │   ├── assert.js            断言引擎
 │   ├── report.js            报告渲染
-│   └── yaml.js              YAML 加载与输出
+│   └── yaml.js              解析器定位与加载（§11.18）
 ├── vendor/
 │   └── js-yaml.mjs          零依赖 ESM（104KB）
 ├── examples/                示例用例 + 示例 registry

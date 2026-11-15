@@ -23,6 +23,7 @@ import { isReadOnly } from '../src/db.js'
 import { listCasesIn, nextCaseId, resolveCasePath, StoreError } from '../src/store.js'
 import { caseStatus, describeSteps, hasAssertions, summariseStatuses } from '../src/plan.js'
 import { loadRegistry, resolveDatabase, describeDatabase, RegistryError } from '../src/registry.js'
+import { parseYaml, parserCandidates } from '../src/yaml.js'
 import { createPanel, PanelError } from '../src/panel.js'
 
 let passed = 0
@@ -1188,6 +1189,61 @@ await testAsync('${env:NAME} expands and keeps its fallback', async () => {
   assert.equal((await resolveDatabase(registry, 'iam')).password, 'fallback-pw')
   const overridden = await loadRegistry({ caseDir: dir, env: { DSH_E2E_TEST_PW: 'from-env' } })
   assert.equal((await resolveDatabase(overridden, 'iam')).password, 'from-env')
+})
+
+section('yaml')
+
+// The panel once greeted the user with four "Invalid URL" warnings across the
+// registry and every case, because the parser was located with
+// `new URL('../vendor/js-yaml.mjs', import.meta.url)` and that base was not a
+// file URL. The base is not something this module controls, so the fix is not
+// "assume a better base" — it is "try the plausible ones and say which failed".
+await testAsync('the parser location survives every base that used to throw', async () => {
+  const bases = ['', undefined, 'data:text/javascript,x', 'node:fs', 'yaml.js', 'C:\\pkg\\src\\yaml.js', '/home/u/pkg/src/yaml.js']
+  for (const url of bases) {
+    const candidates = parserCandidates({ url })
+    assert.ok(candidates.length > 0, `no candidates for base ${JSON.stringify(url)}`)
+    assert.ok(
+      candidates.some((candidate) => candidate.endsWith('/vendor/js-yaml.mjs')),
+      `no candidate points at the vendored parser for base ${JSON.stringify(url)}: ${candidates}`,
+    )
+    assert.ok(
+      candidates.every((candidate) => candidate.startsWith('file:')),
+      `a candidate for base ${JSON.stringify(url)} is not a file URL: ${candidates}`,
+    )
+  }
+})
+
+// `new URL('../vendor/x', 'C:/pkg/src/yaml.js')` does not throw — it treats the
+// drive letter as a scheme and resolves to `c:/pkg/vendor/x`. A candidate like
+// that is worse than no candidate: it is checked before the working directory.
+await test('a drive-letter path is never used as a URL base', () => {
+  const candidates = parserCandidates({ url: 'C:/pkg/src/yaml.js' })
+  assert.ok(
+    !candidates.some((candidate) => /^c:\//i.test(candidate)),
+    `a drive-letter candidate survived: ${candidates}`,
+  )
+})
+
+await test('a Windows path yields its directory, not a bogus URL', () => {
+  const candidates = parserCandidates({ url: 'C:\\pkg\\src\\yaml.js' })
+  assert.ok(
+    candidates.includes('file:///C:/pkg/vendor/js-yaml.mjs'),
+    `expected the drive root candidate first, got: ${candidates}`,
+  )
+})
+
+await test('the first choice is the package directory, not the working directory', () => {
+  const [first] = parserCandidates()
+  assert.ok(first.endsWith('/dsh-e2e/vendor/js-yaml.mjs'), `the first candidate was ${first}`)
+})
+
+await testAsync('a YAML read still works, and a syntax error names the file', async () => {
+  assert.deepEqual(await parseYaml('a: 1\nb: [x, y]'), { a: 1, b: ['x', 'y'] })
+  await assert.rejects(
+    () => parseYaml('a: [1', 'some/case.yaml'),
+    (error) => /invalid YAML/.test(error.message) && /some\/case\.yaml/.test(error.message),
+  )
 })
 
 // ---------------------------------------------------------------- done
