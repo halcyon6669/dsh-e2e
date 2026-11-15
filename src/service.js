@@ -37,6 +37,42 @@ const READY_PATTERNS = [
 ]
 
 /**
+ * Lines that mean the opposite of ready.
+ *
+ * These are checked before the ready patterns, and the order is the whole
+ * point: Spring's "port already in use" advice says *listening on port 8443*
+ * inside the sentence that explains the start failed, so `/Listening on \S+/`
+ * matched the failure notice and a server that never bound a socket was
+ * reported ready. A run then measured a stale process, or nothing.
+ *
+ * Ordered most specific first, and the search is pattern-major, not line-major:
+ * a Spring start failure prints a generic "Application failed to start due to
+ * an exception" line *before* the stack trace that says which port was taken.
+ * Reporting the generic line would tell the reader that something went wrong
+ * while withholding the one fact that fixes it.
+ */
+const FATAL_PATTERNS = [
+  /Port \d+ (?:was|is) already in use/i,
+  /Address already in use/i,
+  /BindException/i,
+  /Web server failed to start/i,
+  /Identify and stop the process that's listening on port/i,
+  /APPLICATION FAILED TO START/i,
+]
+
+/**
+ * The port the service actually bound, read out of its own startup line.
+ *
+ * Not the same as the port in the case's base URL: a run configuration can
+ * listen wherever its own config says, and stopping the port the case expected
+ * leaves the real process running to collide with the next run.
+ */
+const LISTENING_PORT_PATTERNS = [
+  /(?:Tomcat|Netty) started on port(?:\(s\))?:?\s*(\d{2,5})/i,
+  /Listening on\s+\S*:(\d{2,5})/i,
+]
+
+/**
  * Follows one IDE run-log file from a byte offset. Reads are non-destructive so
  * the same file can be re-read for a second assertion without losing lines.
  */
@@ -77,15 +113,29 @@ export class LogFollower {
     }
   }
 
-  /** Waits until one of the readiness patterns shows up, or the deadline passes. */
+  /**
+   * Waits until one of the readiness patterns shows up, or the deadline passes.
+   *
+   * A line that says the start failed ends the wait immediately with
+   * `ok: false` and the offending line attached: waiting out the rest of the
+   * timeout after the server has already given up buys nothing but a minute of
+   * silence, and reporting those runs as ready is worse than either.
+   */
   async waitForReady(timeoutMs, options = {}) {
     const deadline = Date.now() + timeoutMs
     const patterns = options.patterns || READY_PATTERNS
+    const fatalPatterns = options.fatalPatterns || FATAL_PATTERNS
     let lastError = null
     while (Date.now() < deadline) {
       await this.poll(options.maxLines)
+      // Pattern-major, so the most specific fatal line wins over the generic
+      // "failed to start" that Spring prints above the cause.
+      for (const pattern of fatalPatterns) {
+        const failed = this.lines.find((line) => pattern.test(line))
+        if (failed) return { ok: false, line: failed.trim(), fatal: true, error: failed.trim() }
+      }
       const hit = this.lines.find((line) => patterns.some((pattern) => pattern.test(line)))
-      if (hit) return { ok: true, line: hit }
+      if (hit) return { ok: true, line: hit.trim() }
       if (options.extraCheck) {
         const extra = await options.extraCheck().catch((error) => {
           lastError = error
@@ -96,6 +146,17 @@ export class LogFollower {
       await new Promise((resolve) => setTimeout(resolve, options.intervalMs || 500))
     }
     return { ok: false, error: lastError ? lastError.message : `no readiness line within ${timeoutMs}ms` }
+  }
+
+  /** The port this service said it is listening on, or null if it never said. */
+  listeningPort() {
+    for (const line of this.lines) {
+      for (const pattern of LISTENING_PORT_PATTERNS) {
+        const match = pattern.exec(line)
+        if (match) return Number(match[1])
+      }
+    }
+    return null
   }
 
   /** Lines matching a trace id (or every line when none is given). */
@@ -187,6 +248,10 @@ export async function startService(idea, options = {}) {
     supportsDynamicLaunchOverrides: chosen.supportsDynamicLaunchOverrides === true,
     readiness,
     follower,
+    // The port the service says it bound, when it said one; the case's expected
+    // port otherwise. Teardown stops *this* port, because a run configuration is
+    // free to listen somewhere its case did not predict.
+    port: follower.listeningPort() || port,
     output: launched.text,
   }
 }
@@ -199,6 +264,42 @@ export function portOf(baseUrl) {
     return url.protocol === 'https:' ? 443 : 80
   } catch {
     return null
+  }
+}
+
+/**
+ * Asks whether something is already serving the case's base URL.
+ *
+ * Starting a second copy of a service that is already up is not a test of the
+ * code under test — it is a test of whether the port was free. The IDE reports
+ * the start, the new JVM dies on the bind, and the request that follows reaches
+ * the process that was already there, so every assertion describes a build
+ * nobody started. Asking first turns that whole class of run into an honest
+ * "used the service that was running".
+ *
+ * A health path is asked when the target names one; otherwise any answer at all
+ * counts, because a 401 or a 404 from the server is still the server.
+ */
+export async function probeRunningService(baseUrl, options = {}) {
+  const { healthPath = null, insecureTls = false, timeoutMs = 1500 } = options
+  const port = portOf(baseUrl)
+  if (!baseUrl) return { running: false, port, error: 'the target has no base URL to ask' }
+  const url = healthPath ? new URL(healthPath, baseUrl).href : baseUrl
+  const probe = await waitForPort(url, {
+    timeoutMs,
+    intervalMs: Math.max(250, Math.floor(timeoutMs / 4)),
+    insecureTls,
+    accept: (response) => (healthPath ? response.status === 200 : true),
+  })
+  if (!probe.ok) return { running: false, port, url, error: probe.error }
+  return {
+    running: true,
+    port,
+    url,
+    status: probe.response ? probe.response.status : null,
+    line: healthPath
+      ? `health ${healthPath} answered ${probe.response ? probe.response.status : 200} before the run started`
+      : `${url} answered before the run started`,
   }
 }
 

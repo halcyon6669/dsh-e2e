@@ -14,6 +14,7 @@ import { mkdir, mkdtemp, writeFile, rm, readFile, readdir } from 'node:fs/promis
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createServer } from 'node:http'
 
 import { loadCaseFile, buildVariables, interpolateString, interpolate, CaseError, endpointPrefix, withCaseId } from '../src/case.js'
 import { checkTargets, isWriteStatement, stripComments, redact } from '../src/guard.js'
@@ -24,6 +25,8 @@ import { listCasesIn, nextCaseId, resolveCasePath, StoreError } from '../src/sto
 import { caseStatus, describeSteps, hasAssertions, summariseStatuses } from '../src/plan.js'
 import { loadRegistry, resolveDatabase, describeDatabase, RegistryError, listDbMcpSources, writeEntry } from '../src/registry.js'
 import { parseYaml, parserCandidates } from '../src/yaml.js'
+import { LogFollower, probeRunningService } from '../src/service.js'
+import { describeError } from '../src/errors.js'
 import { createPanel, PanelError } from '../src/panel.js'
 
 let passed = 0
@@ -1661,6 +1664,120 @@ await testAsync('the settings read back what was written, and never a password',
   assert.ok(settings.ide, 'the IDE half is always present, even when it is unreachable')
   assert.equal(typeof settings.ide.reachable, 'boolean')
   assert.equal(JSON.stringify(settings).includes('iam_postgres_password'), false, 'the secret never leaves the Host')
+})
+
+section('service log')
+
+// A run reported "ready" while the server had actually failed to bind its port:
+// Spring's advice text contains the words the readiness patterns were looking
+// for, so the failure line was accepted as the startup line. These two tests
+// hold the order that fixes it — failure first, readiness second.
+await testAsync('a start that failed is not a start', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-e2e-log-'))
+  try {
+    const path = join(dir, 'run.log')
+    await writeFile(
+      path,
+      [
+        '  .   ____          _            __ _ _',
+        '2026-11-15 17:14:31.001 ERROR 12345 --- [main] o.s.b.web.embedded.tomcat.TomcatWebServer  :',
+        'APPLICATION FAILED TO START',
+        '',
+        '***************************',
+        'Description:',
+        'Web server failed to start. Port 8443 was already in use.',
+        'Action:',
+        'Identify and stop the process that\'s listening on port 8443 or configure this application to listen on another port.',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+    const follower = new LogFollower(path)
+    const readiness = await follower.waitForReady(1500, { intervalMs: 50 })
+    assert.equal(readiness.ok, false, `a failed start must not read as ready: ${JSON.stringify(readiness)}`)
+    assert.equal(readiness.fatal, true)
+    assert.match(readiness.line, /APPLICATION FAILED TO START|already in use/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+await testAsync('a start that worked says which port it bound', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-e2e-log-'))
+  try {
+    const path = join(dir, 'run.log')
+    await writeFile(
+      path,
+      [
+        '2026-11-15 17:14:31.001  INFO 12345 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8443 (https) with context path \'\'',
+        '2026-11-15 17:14:31.002  INFO 12345 --- [main] c.h.RecordApplication : Started RecordApplication in 4.633 seconds',
+      ].join('\n'),
+      'utf8',
+    )
+    const follower = new LogFollower(path)
+    const readiness = await follower.waitForReady(1500, { intervalMs: 50 })
+    assert.equal(readiness.ok, true, `a real startup line must be accepted: ${JSON.stringify(readiness)}`)
+    assert.equal(readiness.fatal, undefined)
+    assert.equal(follower.listeningPort(), 8443, 'the bound port is read from the log, not assumed from the base URL')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+// An AggregateError's own `message` is always empty, and the reports carried
+// exactly that: `{name: "AggregateError", message: ""}` for a database that
+// refused the connection. The failure entry has to say what went wrong.
+test('a failure that arrives without a message still says what happened', () => {
+  const inner = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:15432'), { code: 'ECONNREFUSED' })
+  const aggregate = Object.assign(new Error(''), { name: 'AggregateError', errors: [inner] })
+  assert.equal(describeError(aggregate), 'connect ECONNREFUSED 127.0.0.1:15432')
+  assert.equal(describeError(Object.assign(new Error(''), { code: 'ETIMEDOUT' })), 'Error (ETIMEDOUT)')
+  assert.match(describeError(Object.assign(new Error(''), { name: 'AggregateError', errors: [] })), /AggregateError/)
+  assert.equal(describeError(Object.assign(new Error(''), { name: 'Coded', code: 'EAI_AGAIN' })), 'Coded (EAI_AGAIN)')
+  assert.equal(describeError(null), '')
+  assert.equal(describeError(new Error('plain')), 'plain')
+})
+
+// The whole reuse rule rests on one question: is something already answering
+// there? A port that nothing listens on must not read as "running", and a 404
+// from a live server must — the server is up, whether or not that route exists.
+await testAsync('a service that answers is reused, and a port that answers nothing is not', async () => {
+  const quiet = createServer(() => {})
+  await new Promise((resolve) => quiet.listen(0, '127.0.0.1', resolve))
+  const quietPort = quiet.address().port
+  await new Promise((resolve) => quiet.close(resolve))
+
+  // Nothing listens here: the probe must say so instead of pretending.
+  const empty = await probeRunningService(`http://127.0.0.1:${quietPort}`, { timeoutMs: 400 })
+  assert.equal(empty.running, false, `a closed port is not a running service: ${JSON.stringify(empty)}`)
+  assert.equal(empty.port, quietPort)
+
+  const server = createServer((request, response) => {
+    response.writeHead(request.url === '/health' ? 200 : 404, { 'content-type': 'text/plain' })
+    response.end('ok')
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const port = server.address().port
+  try {
+    const anyAnswer = await probeRunningService(`http://127.0.0.1:${port}`, { timeoutMs: 800 })
+    assert.equal(anyAnswer.running, true, `a live server is reused: ${JSON.stringify(anyAnswer)}`)
+    assert.equal(anyAnswer.status, 404, 'any answer counts when the target names no health path')
+    assert.match(anyAnswer.line, /before the run started/)
+
+    const health = await probeRunningService(`http://127.0.0.1:${port}`, { healthPath: '/health', timeoutMs: 800 })
+    assert.equal(health.running, true)
+
+    // A health path that answers 404 is a running server whose health endpoint
+    // is missing — but the target asked for *that* endpoint, so it is not ready.
+    const missing = await probeRunningService(`http://127.0.0.1:${port}`, { healthPath: '/nope', timeoutMs: 400 })
+    assert.equal(missing.running, false, `a health path that 404s is not a ready service: ${JSON.stringify(missing)}`)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+
+  const noBaseUrl = await probeRunningService('', {})
+  assert.equal(noBaseUrl.running, false)
+  assert.match(noBaseUrl.error, /no base URL/)
 })
 
 section('yaml')

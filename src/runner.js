@@ -18,7 +18,8 @@ import { IdeaClient } from './idea.js'
 import { buildVariables, interpolate, interpolateString } from './case.js'
 import { enforceGuard, redact } from './guard.js'
 import { resolveEnvironment, describeEnvironment } from './resolve.js'
-import { startService, stopService } from './service.js'
+import { startService, stopService, probeRunningService } from './service.js'
+import { describeError } from './errors.js'
 import { sendRequest } from './http.js'
 import { connectDatabase, runSqlFile, runSqlText, runAssertionQuery } from './db.js'
 import { assertResponse, assertDatabase, assertLogs } from './assert.js'
@@ -70,6 +71,10 @@ export async function runCase(definition, options = {}) {
     // which is how the report tells "no UI to check" from "the UI was checked
     // and said nothing".
     browser: null,
+    // True when the run borrowed a service that was already up. The console tab
+    // reads this: a borrowed service has no log of this run's making, and saying
+    // "no console" without the reason reads like a defect.
+    serviceReused: false,
   }
   const secrets = Object.values(resolved.databases)
     .map((item) => item.password)
@@ -85,6 +90,10 @@ export async function runCase(definition, options = {}) {
 
   let idea = null
   let service = null
+  // True when the service was already up and this run borrowed it. Nothing is
+  // stopped afterwards: a process this run did not start is not this run's to
+  // kill, and killing it would take down whatever else is using it.
+  let reused = false
   const connections = new Map()
   let fatal = null
   let teardownReport = null
@@ -93,6 +102,74 @@ export async function runCase(definition, options = {}) {
   const dbFor = (name) => connections.get(name || 'default') || connections.get('default') || null
 
   const step = (name, detail = {}) => steps.push({ name, at: Date.now() - startedAt, ...detail })
+
+  /**
+   * Reads whatever the service has printed into `evidence.logs`.
+   *
+   * Called twice in the worst case: once at the normal point, after the
+   * request, and again from the teardown when the run failed before reaching
+   * it. A failure that leaves no console is the run whose console the reader
+   * most needs, so the second call is not an optimisation — it is the
+   * difference between a report and an apology.
+   */
+  const collectLogs = async ({ settleMs = 0, assert: assertNow = false } = {}) => {
+    if (!service) return false
+    if (settleMs > 0) await new Promise((resolve) => setTimeout(resolve, settleMs))
+    try {
+      await service.follower.poll()
+    } catch (error) {
+      warnings.push(`the service log could not be read: ${describeError(error)}`)
+      return false
+    }
+    const asserted = Boolean(definition.expect.logs)
+    const wanted = asserted && definition.expect.logs.traceId
+      ? interpolateString(definition.expect.logs.traceId, variables)
+      : traceId
+    const scoped = service.follower.matching(wanted)
+    const scopedOk = scoped.length > 0
+    // A trace id is only usable if the service actually writes it. When nothing
+    // carries it, the honest move is to widen to the lines written since the
+    // request and say so loudly, rather than pass on a broader match silently.
+    const all = service.follower.lines
+    const limit = asserted ? definition.expect.logs.maxLines : 4000
+    const lines = (scopedOk ? scoped : all).slice(-limit)
+    if (asserted && !scopedOk && assertNow) {
+      warnings.push(
+        `no log line carried the trace id ${wanted}: the service does not put the ${traceHeader} header into its logs, ` +
+          `so log assertions fall back to every line of this run and may match unrelated traffic. ` +
+          `Add the header to the logging MDC (logback pattern %X{traceId}) to get per-case log evidence.`,
+      )
+    }
+    evidence.logs = {
+      path: service.fullOutputPath,
+      traceId: wanted,
+      traceIdPresent: scopedOk,
+      // `asserted` is not decoration: it is the difference between "these
+      // lines had to contain something and did" and "these lines are here
+      // because a console is worth keeping". A reader who confuses the two
+      // thinks a passing run verified its logs.
+      asserted: asserted && assertNow,
+      // On the evidence itself, not only on the step: the panel reads the
+      // evidence to decide whether to say the console stops where the failure
+      // did.
+      collected: assertNow ? 'after-request' : 'at-teardown',
+      totalLines: all.length,
+      scopedLines: scoped.length,
+      lines: lines.slice(-120),
+    }
+    step('logs.collected', {
+      totalLines: all.length,
+      scopedLines: scoped.length,
+      scanned: lines.length,
+      traceIdPresent: scopedOk,
+      // Which call produced these lines. A console collected during teardown
+      // stops where the failure did, and saying so is the difference between
+      // "the service printed nothing more" and "nothing more was read".
+      collected: assertNow ? 'after-request' : 'at-teardown',
+    })
+    if (assertNow && asserted) checks.push(...assertLogs(definition.expect.logs, lines, scopedOk ? wanted : null))
+    return true
+  }
 
   try {
     // 1. Connect to the IDE. Without it there is no service to test.
@@ -108,32 +185,65 @@ export async function runCase(definition, options = {}) {
     }
 
     // 2. Start the service through its run configuration and wait for readiness.
+    //    Unless it is already up: see probeRunningService.
     if (idea && target.configurationName) {
-      const envs = {}
-      if (target.profile) envs.SPRING_PROFILES_ACTIVE = target.profile
-      service = await startService(idea, {
-        projectPath: target.projectPath,
-        configurationName: target.configurationName,
-        baseUrl: target.baseUrl,
+      const alive = await probeRunningService(target.baseUrl, {
         healthPath: target.healthPath || null,
-        timeoutMs: target.startTimeoutMs,
         insecureTls: target.insecureTls,
-        envs: Object.keys(envs).length > 0 ? envs : null,
+        timeoutMs: Number(options.startProbeMs || 1200),
       })
-      step('service.started', {
-        configurationName: service.configurationName,
-        logPath: service.fullOutputPath,
-        startupMs: service.startupMs,
-        ready: service.readiness.ok,
-        readinessLine: service.readiness.line || service.readiness.error,
-      })
-      checks.push({
-        ok: service.readiness.ok,
-        label: 'service readiness',
-        expected: 'a startup line in the run log',
-        actual: service.readiness.line || service.readiness.error,
-        detail: service.fullOutputPath,
-      })
+      if (alive.running) {
+        reused = true
+        evidence.serviceReused = true
+        step('service.reused', { url: alive.url, port: alive.port, status: alive.status })
+        checks.push({
+          ok: true,
+          label: 'service already running',
+          expected: 'a service to test',
+          actual: alive.line,
+          detail: 'started before this run; this run reused it and will not stop it',
+        })
+        reused = true
+      } else {
+        const envs = {}
+        if (target.profile) envs.SPRING_PROFILES_ACTIVE = target.profile
+        service = await startService(idea, {
+          projectPath: target.projectPath,
+          configurationName: target.configurationName,
+          baseUrl: target.baseUrl,
+          healthPath: target.healthPath || null,
+          timeoutMs: target.startTimeoutMs,
+          insecureTls: target.insecureTls,
+          envs: Object.keys(envs).length > 0 ? envs : null,
+        })
+        step('service.started', {
+          configurationName: service.configurationName,
+          logPath: service.fullOutputPath,
+          startupMs: service.startupMs,
+          ready: service.readiness.ok,
+          readinessLine: service.readiness.line || service.readiness.error,
+          port: service.port,
+        })
+        checks.push({
+          ok: service.readiness.ok,
+          label: 'service readiness',
+          expected: 'a startup line in the run log',
+          actual: service.readiness.line || service.readiness.error,
+          detail: service.fullOutputPath,
+        })
+        // A service that never started cannot answer a request, and sending one
+        // anyway turns "the port was already taken" into a page of connection
+        // errors that all describe the same fact. Stop here, with the line the
+        // server itself wrote.
+        if (!service.readiness.ok) {
+          throw new RunError(
+            service.readiness.fatal
+              ? `the service did not start: ${service.readiness.line}`
+              : `the service did not become ready: ${service.readiness.error}`,
+            { readiness: service.readiness },
+          )
+        }
+      }
     } else if (resolved.serviceRequired) {
       throw new RunError('the target names no run configuration: a case must name the IDE run configuration that starts the service')
     }
@@ -154,7 +264,7 @@ export async function runCase(definition, options = {}) {
         })
       } catch (error) {
         if (name === 'default') throw error
-        checks.push({ ok: false, label: `database ${name}`, expected: 'a connection', actual: error.message, detail: '' })
+        checks.push({ ok: false, label: `database ${name}`, expected: 'a connection', actual: describeError(error), detail: '' })
       }
     }
     const db = dbFor('default')
@@ -290,46 +400,12 @@ export async function runCase(definition, options = {}) {
     //    that started a server and then says nothing about what that server
     //    printed leaves the reader with the one thing they always want and
     //    never get back: the console at the moment it broke.
-    if (service) {
-      const asserted = Boolean(definition.expect.logs)
+    await collectLogs({
       // Longer wait when something is about to be asserted on: a line that has
       // not been flushed yet turns a real assertion into a flaky one.
-      await new Promise((resolve) => setTimeout(resolve, asserted ? (options.logSettleMs ?? 800) : (options.logFlushMs ?? 250)))
-      await service.follower.poll()
-      const wanted = asserted && definition.expect.logs.traceId
-        ? interpolateString(definition.expect.logs.traceId, variables)
-        : traceId
-      const scoped = service.follower.matching(wanted)
-      const scopedOk = scoped.length > 0
-      // A trace id is only usable if the service actually writes it. When nothing
-      // carries it, the honest move is to widen to the lines written since the
-      // request and say so loudly, rather than pass on a broader match silently.
-      const all = service.follower.lines
-      const limit = asserted ? definition.expect.logs.maxLines : 4000
-      const lines = (scopedOk ? scoped : all).slice(-limit)
-      if (asserted && !scopedOk) {
-        warnings.push(
-          `no log line carried the trace id ${wanted}: the service does not put the ${traceHeader} header into its logs, ` +
-            `so log assertions fall back to every line of this run and may match unrelated traffic. ` +
-            `Add the header to the logging MDC (logback pattern %X{traceId}) to get per-case log evidence.`,
-        )
-      }
-      evidence.logs = {
-        path: service.fullOutputPath,
-        traceId: wanted,
-        traceIdPresent: scopedOk,
-        // `asserted` is not decoration: it is the difference between "these
-        // lines had to contain something and did" and "these lines are here
-        // because a console is worth keeping". A reader who confuses the two
-        // thinks a passing run verified its logs.
-        asserted,
-        totalLines: all.length,
-        scopedLines: scoped.length,
-        lines: lines.slice(-120),
-      }
-      step('logs.collected', { totalLines: all.length, scopedLines: scoped.length, scanned: lines.length, traceIdPresent: scopedOk })
-      if (asserted) checks.push(...assertLogs(definition.expect.logs, lines, scopedOk ? wanted : null))
-    }
+      settleMs: definition.expect.logs ? (options.logSettleMs ?? 800) : (options.logFlushMs ?? 250),
+      assert: true,
+    })
 
     // 6b. Probe calls: follow-up requests that ask the service about its own
     //     state. Some of what a case must verify is only visible through the
@@ -543,14 +619,26 @@ export async function runCase(definition, options = {}) {
       }
       connections.delete(name)
     }
+    // The run failed before it reached the log step, or never got to the
+    // request. Read the console anyway, before the service is stopped: a
+    // failure report without the lines the server wrote is the report nobody
+    // can use.
+    if (service && !evidence.logs) {
+      await collectLogs({ settleMs: 0, assert: false })
+    }
     if (service && !resolved.keepServiceRunning && !options.keepServiceRunning) {
-      const port = portOf(target.baseUrl)
+      // Stop the port the service says it bound, not the one the case expected.
+      const port = service.port || portOf(target.baseUrl)
       const stopped = await stopService({ port, idea })
       teardownReport.service = { port, ...stopped }
       step('service.stopped', { port, stopped: stopped.stopped })
       if (!stopped.stopped) teardownReport.errors.push(`the service on port ${port} did not stop: ${stopped.error || ''}`)
     } else if (service) {
-      teardownReport.service = { port: portOf(target.baseUrl), stopped: false, kept: true }
+      teardownReport.service = { port: service.port || portOf(target.baseUrl), stopped: false, kept: true }
+    } else if (reused) {
+      // Borrowed, not started: no log to follow and nothing to stop. Saying so
+      // is what keeps "the console is empty" from looking like a bug.
+      teardownReport.service = { port: portOf(target.baseUrl), stopped: false, reused: true }
     }
     if (idea) {
       try {
@@ -580,7 +668,11 @@ export async function runCase(definition, options = {}) {
     verdict,
     startedAt: new Date(startedAt).toISOString(),
     durationMs: Date.now() - startedAt,
-    fatal: fatal ? { message: fatal.message, name: fatal.name, details: fatal.problems || null } : null,
+    // `message` goes through describeError because the thrown thing is often an
+    // AggregateError, whose own message is always the empty string: a failure
+    // entry that says `{name: "AggregateError", message: ""}` has recorded that
+    // something broke without recording what.
+    fatal: fatal ? { message: describeError(fatal), name: fatal.name, details: fatal.problems || null } : null,
     steps,
     checks,
     failedChecks: failed,

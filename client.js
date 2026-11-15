@@ -186,7 +186,13 @@ window.__ModuleLoader__.load({
         'label.unchanged': 'No change',
         'label.noChecks': 'This run recorded no checkpoints.',
         'label.noLogs':
-          'This run has no console to show. Runs recorded before the tool started keeping the server output do not have one, and a case that starts no service has no console at all.',
+          'This run has no console to show: it started no service, so nothing printed a line. A run that starts a service keeps its output even when it fails before the request.',
+        'label.logsAtTeardown':
+          'Collected while the run was being torn down: these are the lines the service had written when it failed, not everything it might have printed later.',
+        'label.logsReused':
+          'The service was already running when this case started, so this run used it instead of launching a second copy — and a process this run did not start has no log of its own to show here.',
+        'label.logsEmpty':
+          'The service was followed, but its log was empty at the moment it was read: nothing had been written yet.',
         'label.logsUnscoped':
           'No log line carried this run’s trace id, so these are every line since the request started — they may include unrelated traffic.',
         'label.logsNotAsserted':
@@ -461,7 +467,12 @@ window.__ModuleLoader__.load({
         'label.changed': '有变化',
         'label.unchanged': '无变化',
         'label.noChecks': '这次运行没有记录检查点。',
-        'label.noLogs': '这次运行没有控制台可看。工具开始保留服务输出之前的旧报告没有，不启动服务的用例也没有。',
+        'label.noLogs': '这次运行没有控制台可看：它没有启动服务，所以没有谁打印过一行。启动服务的运行即使早早失败，也会把输出留下来。',
+        'label.logsAtTeardown':
+          '这是在收尾时读到的：服务失败那一刻已经写下的行，不是它之后再打印的全部内容。',
+        'label.logsReused':
+          '这条用例开始时服务已经在跑了，所以这次是直接用，没有再起第二个副本——不是这次起的进程，也就没有这次运行的日志可以给它看。',
+        'label.logsEmpty': '服务是一直跟着的，但读的时候日志还是空的：那时候它什么都还没写。',
         'label.logsUnscoped': '没有日志行带这次运行的 trace id，所以这里是请求开始之后的全部日志，可能混入无关流量。',
         'label.logsNotAsserted':
           '这份日志只是证据，没有被断言：这条用例不检查控制台，所以绿只说明服务答复了，不说明它没有打印过难看的异常。',
@@ -1900,10 +1911,22 @@ window.__ModuleLoader__.load({
                     // "the run verified its logs" and "here is what the service
                     // printed".
                     evidence.logs.asserted === false ? h('div', { className: 'e2e-muted' }, t('label.logsNotAsserted')) : null,
+                    evidence.logs.collected === 'at-teardown'
+                      ? h('div', { className: 'e2e-muted' }, t('label.logsAtTeardown'))
+                      : null,
                     evidence.logs.traceIdPresent ? null : h('div', { className: 'e2e-warning' }, t('label.logsUnscoped')),
-                    h('pre', { className: 'e2e-pre is-tall' }, formatBody((evidence.logs.lines || []).join('\n'))),
+                    (evidence.logs.lines || []).length > 0
+                      ? h('pre', { className: 'e2e-pre is-tall' }, formatBody((evidence.logs.lines || []).join('\n')))
+                      : h('div', { className: 'e2e-muted' }, t('label.logsEmpty')),
                   )
-                : h('div', { className: 'e2e-muted' }, t('label.noLogs'))
+                : h(
+                    'div',
+                    { className: 'e2e-muted' },
+                    t('label.noLogs'),
+                    evidence && evidence.serviceReused
+                      ? h('span', null, ' ', t('label.logsReused'))
+                      : null,
+                  )
               : null,
             tab === 'database'
               ? evidence && evidence.snapshots && evidence.snapshots.length > 0

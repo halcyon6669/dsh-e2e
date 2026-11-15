@@ -348,7 +348,35 @@ const PAST_REPORT = {
 const requested = []
 /** The parsed request body of every POST, paired with its path. */
 const posted = []
-// Two controllers declaring the same route is what a real project looks like, and
+
+/**
+ * A run that found the service already listening and used it.
+ *
+ * There is no log of this run's own making, so the console tab has nothing to
+ * show — and an empty tab that does not say why is indistinguishable from the
+ * bug that emptied every console tab on the machine.
+ */
+const REUSED_REPORT = {
+  ok: true,
+  path: 'C:\\reports\\run-2.json',
+  format: 'json',
+  report: {
+    runId: 'run-2',
+    caseId: 'REG-001',
+    verdict: 'passed',
+    durationMs: 210,
+    traceId: 'trace-reused',
+    fatal: null,
+    environment: { target: 'record-local', baseUrl: 'http://localhost:8080', configurationName: 'RecordApplication' },
+    teardown: { sql: [], mocks: [], service: { port: 8080, stopped: false, reused: true }, errors: [] },
+    checks: [{ ok: true, label: 'service already running', actual: 'http://localhost:8080 answered before the run started' }],
+    steps: [{ at: 0, name: 'service.reused' }],
+    evidence: { request: null, response: null, logs: null, database: [], browser: null, serviceReused: true },
+  },
+}
+
+/** What the report route answers; swapped by the test that needs another run. */
+let pastReport = PAST_REPORT// Two controllers declaring the same route is what a real project looks like, and
 // it is what a route-only identity gets wrong: the second one collapses onto the
 // first, or reports itself "already there".
 const SCAN = {
@@ -456,7 +484,7 @@ globalThis.fetch = async (url, options) => {
     : path.startsWith('/case?')
       ? CASE_FILE
       : path.startsWith('/report?')
-        ? PAST_REPORT
+        ? pastReport
         : path.startsWith('/scan')
           ? SCAN
           : path.startsWith('/import-endpoints')
@@ -992,6 +1020,35 @@ await test('the console tab shows the server output and says it was not asserted
   // verified that nothing alarming was logged.
   assert.match(text, /Kept for evidence, not asserted on/, 'it says what the log is worth')
   assert.doesNotMatch(text, /collected no logs/, 'and does not claim there are none')
+})
+
+// A run that borrowed a service that was already up has no console of its own.
+// Saying only "no console" reads like the defect this page was reported for, so
+// the reason has to be on the page.
+await test('a borrowed service says why its console is empty', async () => {
+  pastReport = REUSED_REPORT
+  try {
+    const opened = await openDetail()
+    const consoleTab = elementsOf(opened).find(
+      (node) =>
+        node.props &&
+        String(node.props.className || '').split(' ').includes('e2e-mode-btn') &&
+        /Console/.test(textOf(node)),
+    )
+    assert.ok(consoleTab, 'the detail page offers the console tab')
+    consoleTab.props.onClick()
+    const withConsole = await settle(() => mainComponent({}))
+    const text = textOf(withConsole)
+    assert.match(text, /used it instead of launching a second copy/, 'the reader is told the service was reused')
+    assert.match(text, /no log of its own/, 'and why that means an empty console')
+  } finally {
+    pastReport = PAST_REPORT
+    // The report is read once, when the case is opened, so putting the fixture
+    // back is not enough: the page still holds the borrowed-service run. Open
+    // the case again so the tests after this one start from the same report
+    // they were written against.
+    await openDetail()
+  }
 })
 
 await test('a report without snapshots still shows the rows it read', async () => {
