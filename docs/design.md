@@ -121,33 +121,33 @@
 | 文件 | 行数 | 职责 | 关键设计决策 |
 |---|---|---|---|
 | `index.js` | 150 | 插件入口，`apply(ctx, config)` | 模块解析钩子给整棵依赖图加 generation，改任何 `src/*.js` 都不必重启 DSH |
-| `client.js` | 3436 | 浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划 + 侧栏入口 | 纯手写 bundle，React 来自宿主模块表，见 §16 |
-| `src/host.js` | 306 | 组装、示例播种、`/status`、客户端半自检 | 面板首次打开不能是空目录，见 §16.1 |
-| `src/panel.js` | 994 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
-| `src/store.js` | 322 | 用例与报告的唯一磁盘入口 | 路径必须落在 root 内，见 §16.2 |
-| `src/projects.js` | 398 | 项目表：按 origin 归并 target、汇总最近结果与分组 | 不存储、只推导；见 §5.10 |
-| `src/plan.js` | 156 | 步骤描述、状态判定、组内结论 | 纯函数，Host 算一次浏览器不重算；见 §5.11 |
-| `src/edit.js` | 253 | 表单 → YAML 的行级补丁 | 不重新序列化，见 §5.12 |
-| `src/ai.js` | 310 | 生成用例、解释失败 | 模型永不参与判定，见 §16.4 |
-| `src/scan.js` | 539 | 读 Spring 源码：端点、DTO 约束、实体表名 | 只读，注解解析不引依赖，见 §16.5 |
-| `src/scaffold.js` | 294 | 端点 → 用例骨架 | 只生成骨架不猜断言，见 §16.5 |
-| `src/tools.js` | 525 | 注册 7 个工具 | 与面板共用 store，不重复实现 |
-| `src/case.js` | 851 | YAML 解析与规范化 | 未知字段直接报错（见 §5.4） |
-| `src/registry.js` | 389 | target / 数据库注册表 | 支持 `from: db-mcp` 复用已存数据源，见 §5.7 |
-| `src/resolve.js` | 158 | 用例 + registry → 实际连接 | 三层合并，缺配置时列出可用名字 |
-| `src/guard.js` | 220 | 环境护栏 | 校验解析后的地址（见 §9） |
-| `src/runner.js` | 712 | 流水线编排 | `finally` 保证 teardown 与停服 |
-| `src/browser.js` | 539 | CDP 客户端：起 Chrome、按步骤操作、截图 | 零依赖 WebSocket，见 §5.16 |
-| `src/service.js` | 271 | 启停服务、跟随日志 | 端口占用预检（见 §6.2） |
-| `src/idea.js` | 275 | IDEA MCP 客户端 | 手写 SSE + JSON-RPC，不引依赖 |
-| `src/http.js` | 137 | HTTP 客户端 | 用 `node:http` 而非 `fetch`（见 §4.2） |
-| `src/pg.js` | 455 | PostgreSQL 线协议 | 手写，含 SCRAM-SHA-256（见 §4.2） |
-| `src/db.js` | 149 | 数据库门面 | 强制只读断言 |
-| `src/assert.js` | 254 | 断言引擎 | 每条断言返回统一结构（见 §7.2） |
-| `src/report.js` | 378 | 报告渲染 | 双格式：JSON + Markdown |
-| `src/yaml.js` + `vendor/js-yaml.mjs` | 43 + 104KB | YAML 解析与输出 | 内置 vendor，见 §4.2 |
+| `client.js` | 3596 | 浏览器半：项目表 + 用例清单 + 用例详情 + 编辑测试计划 + 侧栏入口 | 纯手写 bundle，React 来自宿主模块表，见 §16 |
+| `src/host.js` | 323 | 组装、示例播种、`/status`、客户端半自检 | 面板首次打开不能是空目录，见 §16.1 |
+| `src/panel.js` | 992 | 面板 REST API | 保存先写临时文件再改名，见 §16.2 |
+| `src/store.js` | 319 | 用例与报告的唯一磁盘入口 | 路径必须落在 root 内，见 §16.2 |
+| `src/projects.js` | 397 | 项目表：按 origin 归并 target、汇总最近结果与分组 | 不存储、只推导；见 §5.10 |
+| `src/plan.js` | 155 | 步骤描述、状态判定、组内结论 | 纯函数，Host 算一次浏览器不重算；见 §5.11 |
+| `src/edit.js` | 252 | 表单 → YAML 的行级补丁 | 不重新序列化，见 §5.12 |
+| `src/ai.js` | 309 | 生成用例、解释失败 | 模型永不参与判定，见 §16.4 |
+| `src/scan.js` | 538 | 读 Spring 源码：端点、DTO 约束、实体表名 | 只读，注解解析不引依赖，见 §16.5 |
+| `src/scaffold.js` | 293 | 端点 → 用例骨架 | 只生成骨架不猜断言，见 §16.5 |
+| `src/tools.js` | 524 | 注册 7 个工具 | 与面板共用 store，不重复实现 |
+| `src/case.js` | 850 | YAML 解析与规范化 | 未知字段直接报错（见 §5.4） |
+| `src/registry.js` | 388 | target / 数据库注册表 | 支持 `from: db-mcp` 复用已存数据源，见 §5.7 |
+| `src/resolve.js` | 156 | 用例 + registry → 实际连接 | 三层合并，缺配置时列出可用名字 |
+| `src/guard.js` | 219 | 环境护栏 | 校验解析后的地址（见 §9） |
+| `src/runner.js` | 727 | 流水线编排 | `finally` 保证 teardown 与停服 |
+| `src/browser.js` | 538 | CDP 客户端：起 Chrome、按步骤操作、截图 | 零依赖 WebSocket，见 §5.16 |
+| `src/service.js` | 270 | 启停服务、跟随日志 | 端口占用预检（见 §6.2） |
+| `src/idea.js` | 274 | IDEA MCP 客户端 | 手写 SSE + JSON-RPC，不引依赖 |
+| `src/http.js` | 136 | HTTP 客户端 | 用 `node:http` 而非 `fetch`（见 §4.2） |
+| `src/pg.js` | 454 | PostgreSQL 线协议 | 手写，含 SCRAM-SHA-256（见 §4.2） |
+| `src/db.js` | 148 | 数据库门面 | 强制只读断言 |
+| `src/assert.js` | 253 | 断言引擎 | 每条断言返回统一结构（见 §7.2） |
+| `src/report.js` | 383 | 报告渲染 | 双格式：JSON + Markdown |
+| `src/yaml.js` + `vendor/js-yaml.mjs` | 42 + 104KB | YAML 解析与输出 | 内置 vendor，见 §4.2 |
 
-`index.js` 151 行、`client.js` 3534 行（浏览器半，手写 bundle，含样式）。合计约 **12,300 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
+合计 **12,686 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**。
 
 `client.js` 涨得最快，而它没有任何编译期检查：`node --check` 只看语法，看不见一个改了名却没跟着改的变量。这就是 `dev/render.test.mjs` 存在的原因（§17），也是为什么前端每加一个页面都要同时加渲染探针。
 
