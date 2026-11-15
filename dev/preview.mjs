@@ -196,6 +196,9 @@ const CASE_ENTRY = (id, caseId, endpoint, scenario, status, group) => ({
   configuration: null,
   databases: [],
   verdict: status === 'failed' ? 'failed' : status === 'passed' ? 'passed' : null,
+  // The diagnosis column reads the run summary the Host matched; without it a
+  // passed row diagnoses to an empty string, which reads as a bug in the page.
+  run: status === 'passed' || status === 'failed' ? { summary: { checks: 5, durationMs: 1234, caseId, verdict: status } } : null,
 })
 
 const CASES = [
@@ -254,7 +257,7 @@ const PROJECTS = {
 
 const BOOTSTRAP = {
   ok: true,
-  plugin: { version: '0.8.0', dataDir: 'C:\\data', mountedAt: '/plugins/e2e' },
+  plugin: { version: '0.9.0', dataDir: 'C:\\data', mountedAt: '/plugins/e2e' },
   caseDirs: ['C:\\cases'],
   cases: [{ dir: 'C:\\cases', cases: CASES, groups: [groupOf('Registration', CASES)], failures: [] }],
   registry: { file: 'C:\\cases\\e2e.registry.yml', targets: ['record-local'], databases: [], error: null },
@@ -665,7 +668,9 @@ function findNode(tree, name, matcher) {
         const children = item.props ? item.props.children : null
         if (typeof children === 'string') parts.push(children)
         if (Array.isArray(children)) inner.push(...children)
+        else if (children) inner.push(children)
       }
+      if (!matcher.test(parts.join(' '))) console.log(`  findNode: ${name} text = ${JSON.stringify(parts.join(' ').slice(0, 80))}`)
       if (matcher.test(parts.join(' '))) return node
     }
     const children = node.props ? node.props.children : null
@@ -680,13 +685,14 @@ const pages = []
 pages.push({ name: 'projects', file: write('projects', list, { dark: true, width: 1440 }) })
 
 // The project table is the landing page; the case rows live one level down.
-const projectRow = findNode(list, 'e2e-table-row', /Record/)
+const projectRow = findNode(list, 'e2e-project-card', /Record/)
 let caseRow = null
 if (projectRow && typeof projectRow.props.onClick === 'function') {
   projectRow.props.onClick()
   const inside = await settle(mainComponent)
   pages.push({ name: 'cases', file: write('cases', inside, { dark: true, width: 1440 }) })
-  caseRow = findNode(inside, 'e2e-case-row', /REG-001/)
+  // The row is a container; the click lives on the open button inside it.
+  caseRow = findNode(inside, 'e2e-case-open', /REG-001/)
 }
 
 if (caseRow && typeof caseRow.props.onClick === 'function') {

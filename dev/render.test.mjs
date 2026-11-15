@@ -123,6 +123,9 @@ const CASE_ENTRY = (id, caseId, endpoint, scenario, status, group) => ({
   configuration: null,
   databases: [],
   verdict: status === 'failed' ? 'failed' : status === 'passed' ? 'passed' : null,
+  // The diagnosis column reads the run summary the Host matched to this case;
+  // without it a passed row would diagnose to an empty string.
+  run: status === 'passed' || status === 'failed' ? { summary: { checks: 5, durationMs: 1234, caseId, verdict: status } } : null,
 })
 
 const RECORD_CASES = [
@@ -507,27 +510,25 @@ const landing = await settle(() => mainComponent({}))
 const landingText = textOf(landing)
 
 await test('the landing view is the project table', () => {
-  assert.match(landingText, /Projects/, 'the view should name itself')
+  assert.match(landingText, /Cases/, 'the view should name itself')
   assert.match(landingText, /Record/)
   assert.match(landingText, /shop-web/)
 })
 
 await test('results render as counts, not one summary word', () => {
-  assert.match(landingText, /✓ 1/, 'the passed count should be visible')
-  assert.match(landingText, /✕ 1/, 'the failed count should be visible')
+  assert.match(landingText, /1 Passed/, 'the passed count should be visible')
+  assert.match(landingText, /1 Failed/, 'the failed count should be visible')
   assert.match(landingText, /Not run/, 'a project with no cases says so')
 })
 
 await test('the type column comes from the Host, not a guess', () => {
-  assert.match(landingText, /Backend/)
-  assert.match(landingText, /Frontend/)
+  assert.match(landingText, /BACKEND/)
+  assert.match(landingText, /FRONTEND/)
 })
 
 await test('activity is relative, and the exact time stays in the title', () => {
-  // The first cell with this class is the header row, so pick the first data row
-  // by its title instead of by position.
   const cells = elementsOf(landing).filter(
-    (node) => node.props && node.props.className === 'e2e-col-activity' && node.props.title,
+    (node) => node.props && node.props.className === 'e2e-project-when' && node.props.title,
   )
   assert.ok(cells.length >= 2, `expected an activity cell per project, found ${cells.length}`)
   assert.match(textOf(cells[0]), /23m ago/)
@@ -539,7 +540,7 @@ await test('the table and the case list come from one round trip', () => {
   assert.ok(requested.includes('/projects'))
 })
 
-const row = elementsOf(landing).find((node) => node.props && node.props.className === 'e2e-table-row')
+const row = elementsOf(landing).find((node) => node.props && node.props.className === 'e2e-project-card' && node.props.onClick)
 
 await test('clicking a project row opens that project', async () => {
   assert.ok(row, 'expected a clickable row')
@@ -562,7 +563,7 @@ await test('a fresh list keeps the open project up to date', async () => {
   // The open project is looked up by key on every render, so a case added while
   // it is open shows up. Holding the object from click time would freeze it.
   const opened = await settle(() => mainComponent({}))
-  const rows = elementsOf(opened).filter((node) => node.props && node.props.className === 'e2e-table-row')
+  const rows = elementsOf(opened).filter((node) => node.props && node.props.className === 'e2e-project-card')
   assert.equal(rows.length, 0, 'the table must not render behind the open project')
 })
 
@@ -572,7 +573,9 @@ const listed = await settle(() => mainComponent({}))
 const listedText = textOf(listed)
 
 await test('the case list has a tab per status, each with its count', () => {
-  const tabs = elementsOf(listed).filter((node) => node.props && String(node.props.className || '').startsWith('e2e-tab'))
+  const tabs = elementsOf(listed).filter(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-tab'),
+  )
   assert.ok(tabs.length >= 7, `expected a tab per status, found ${tabs.length}`)
   assert.match(listedText, /All/, 'the tabs should name their statuses')
   assert.match(listedText, /Blocked/)
@@ -588,7 +591,10 @@ await test('each row carries the four things the table promises', () => {
   assert.match(text, /REG-001/, 'the id')
   assert.match(text, /Passed/, 'the latest status')
   assert.match(text, /proves auth-register/, 'the test name')
-  assert.match(text, /medium/, 'the priority')
+  // The fourth column is the diagnosis, which replaced the priority chip in the
+  // Stitch layout: a run summary answers "why" where a priority answered "rank".
+  assert.match(text, /checks · \d+ ms/, 'the diagnosis for a run case')
+  assert.match(text, /steps/, 'the diagnosis for an unrun case')
 })
 
 await test('a case that has never run says planned, not passed', () => {
@@ -603,19 +609,19 @@ await test('the rows are grouped under the use case, with a summary', () => {
   const text = listedText
   assert.match(text, /Registration/, 'the group name')
   assert.match(text, /3 tests/, 'the group says how many it holds')
-  const bars = elementsOf(listed).filter((node) => node.props && node.props.className === 'e2e-bar')
-  assert.ok(bars.length >= 1, 'the group should show a pass/fail bar')
+  const balances = elementsOf(listed).filter((node) => node.props && node.props.className === 'e2e-group-balance')
+  assert.ok(balances.length >= 1, 'the group should show a pass/fail balance')
 })
 
 await test('a group folds, and stays folded across a refresh', async () => {
-  const head = elementsOf(listed).find(
-    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-plan-group-head'),
+  const fold = elementsOf(listed).find(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-group-fold'),
   )
-  assert.ok(head, 'expected the group header to be clickable')
-  assert.equal(head.type, 'button', 'folding is an action, so the header is a button')
-  assert.equal(head.props['aria-expanded'], 'true', 'a group starts open')
+  assert.ok(fold, 'expected the fold control on the group header')
+  assert.equal(fold.type, 'button', 'folding is an action, so it has a button')
+  assert.equal(fold.props['aria-expanded'], 'true', 'a group starts open')
 
-  head.props.onClick()
+  fold.props.onClick()
   const folded = await settle(() => mainComponent({}))
   assert.equal(
     elementsOf(folded).filter((node) => node.props && node.props.className === 'e2e-case-row').length,
@@ -637,7 +643,7 @@ await test('a group folds, and stays folded across a refresh', async () => {
   )
 
   const again = elementsOf(await settle(() => mainComponent({}))).find(
-    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-plan-group-head'),
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-group-fold'),
   )
   again.props.onClick()
   const open = await settle(() => mainComponent({}))
@@ -650,7 +656,10 @@ await test('a group folds, and stays folded across a refresh', async () => {
 /* ---------- the case detail page ---------- */
 
 const caseRow = elementsOf(listed).find(
-  (node) => node.props && node.props.className === 'e2e-case-row' && textOf(node).includes('REG-001'),
+  (node) =>
+    node.props &&
+    String(node.props.className || '').split(' ').includes('e2e-case-open') &&
+    textOf(node).includes('REG-001'),
 )
 
 await test('opening a case reads it, it does not open the editor', async () => {
@@ -664,7 +673,7 @@ await test('opening a case reads it, it does not open the editor', async () => {
   assert.match(text, /Properties/, 'the properties column')
   assert.match(text, /Code/, 'the code tab')
   assert.match(text, /History/, 'the history tab')
-  assert.match(text, /Run test/, 'running it is one button')
+  assert.match(text, /Run again/, 'running it is one button')
   assert.match(text, /Edit/, 'editing is a separate, deliberate step')
   const inputs = elementsOf(opened).filter((node) => node.props && node.props.className === 'e2e-input')
   assert.equal(inputs.length, 0, 'the detail page has no editable fields')
@@ -768,7 +777,7 @@ await test('pressing Edit is what opens the editor', async () => {
     (node) =>
       node.props &&
       String(node.props.className || '').split(' ').includes('e2e-btn') &&
-      textOf(node) === 'Edit',
+      textOf(node) === 'Edit test plan',
   )
   assert.ok(edit, 'expected an Edit button on the detail page')
   edit.props.onClick()
@@ -839,21 +848,28 @@ async function openDetail() {
   let tree = await settle(() => mainComponent({}))
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const row = elementsOf(tree).find(
-      (node) => node.props && node.props.className === 'e2e-case-row' && textOf(node).includes('REG-001'),
+      (node) =>
+        node.props &&
+        String(node.props.className || '').split(' ').includes('e2e-case-open') &&
+        textOf(node).includes('REG-001'),
     )
     if (row) {
       row.props.onClick()
       return settle(() => mainComponent({}))
     }
     // Whatever page the previous test left open, there is exactly one control
-    // that means "I am done here": Back in the detail page, Done in the editor.
-    const leave = elementsOf(tree).find(
-      (node) =>
-        node.props &&
-        String(node.props.className || '').split(' ').includes('e2e-btn') &&
-        /^(Back to test cases|Done)$/.test(textOf(node).trim()),
-    )
-    assert.ok(leave, 'expected a control that returns to the case list')
+    // that means "I am done here": the All-projects crumb (a crumb, not a btn),
+    // or Done in the editor. On the landing page there is none of those —
+    // getting back into a project is done with its card.
+    const leave =
+      elementsOf(tree).find(
+        (node) =>
+          node.props &&
+          ['e2e-btn', 'e2e-crumb'].some((name) => String(node.props.className || '').split(' ').includes(name)) &&
+          /^(All projects|Done)$/.test(textOf(node).trim()),
+      ) ||
+      elementsOf(tree).find((node) => node.props && node.props.className === 'e2e-project-card' && node.props.onClick)
+    assert.ok(leave, `expected a control that returns to the case list; page was: ${textOf(tree).replace(/\s+/g, ' ').slice(0, 300)}`)
     leave.props.onClick()
     tree = await settle(() => mainComponent({}))
   }

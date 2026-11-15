@@ -147,7 +147,7 @@
 | `src/report.js` | 384 | 报告渲染 | 双格式：JSON + Markdown |
 | `src/yaml.js` + `vendor/js-yaml.mjs` | 135 + 104KB | YAML 解析与输出 | 内置 vendor；不信任 `import.meta.url`（见 §11.18） |
 
-合计约 **13,400 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**（另有 `dev/preview.mjs` 约 780 行 + 十三个探针，都是开发期工具，不进运行时）。
+合计约 **13,700 行**自有代码 + 104KB vendored YAML 解析器，**零运行时依赖**（另有 `dev/preview.mjs` 约 790 行 + 十三个探针，都是开发期工具，不进运行时；`dev/theme.css` 是内联后的主题快照）。
 
 `client.js` 涨得最快，而它没有任何编译期检查：`node --check` 只看语法，看不见一个改了名却没跟着改的变量。这就是 `dev/render.test.mjs` 存在的原因（§17），也是为什么前端每加一个页面都要同时加渲染探针。
 
@@ -720,6 +720,17 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 4. **页脚审计条**：teardown 是否干净、清理了几条语句、trace id。一个漏了 8443 端口服务的绿运行不是绿运行，而这件事不该只在报告 Markdown 里说。
 
 配色**一个 hex 都不写**：全部用宿主的 `--dsw-alias-*` 变量，深浅由 `body[data-ds-dark-theme]` 切换，透明度用 `color-mix(in srgb, var(--dsw-alias-*) N%, transparent)`。参考图的 `code.html` 用的是写死的 Tailwind 色值（`#0B0F17`、`#10B981`…），直接搬进来会同时违反 §16.7 和 `dev/client.test.mjs` 的静态检查（它从 `const STYLE` 里切 12000 字符，禁止任何 `#[0-9a-fA-F]{3,8}` 与 `rgb(`），而且宿主换主题时面板不会跟着换。
+
+### 5.14.2 Stitch 改版：顶部导航、项目卡、用例矩阵、串行条
+
+用户用 Google Stitch 产出了两页设计稿（`项目与用例清单`、`用例详情与证据`），要求「按这个来实现，上面的导航栏也按这个来」。落地的规矩与 §5.14.1 相同——**结构照搬，颜色全部映射到宿主 token**——但版式有四处结构性变化：
+
+1. **顶部导航成为全局骨架**：`◆ dsh-e2e` + 标题 + 环境 chip，三个页签（用例清单/用例详情与证据/测试计划编辑，**到达才亮**，不点击跳转——页面由读者的动作到达，页签只报告位置），右侧 `刷新 / 运行选中 / 运行全量回归` 与 `SUITE: <项目名>`。原面包屑下移一行。**教训**：detail 视图内容长时 header 作为可收缩 flex 子项被压缩到只剩 bar 行，tabs 与 crumbs 被 `overflow: hidden` 裁掉——导航是读者离开这个页面的路，`.e2e-topnav` 与 `.e2e-crumbs` 都要 `flex: 0 0 auto`（与 hero 的「卡片保持自己的高度」是同一条规矩）。
+2. **项目表 → 项目卡**：落地页从六列表格改为卡网格。通过率是大数字（`33.3%`），四段进度条 + 图例给出成分；类型徽章直接显示大写英文（`BACKEND`），因为它是技术事实而不是 UI 文案，翻译它只会让两个读者对同一个项目看到两个名字。原来的 `ResultCounts`/`TypeChip`/`GroupBar`/`groupSummary` 四个组件与 `summary.*`、`label.type.*`、`label.partial` 十个字典键随之删除——**死代码由探针抓出**（client.test 的「未用键」检查在函数删除后立即报出孤儿键）。
+3. **用例矩阵**：12 栏 grid，新增**诊断列**（`5 checks · 1234 ms` / `Awaiting its first run · 3 steps` / 被拦原因）与**操作列**（`▶` 重放 / `◎` 看证据）。诊断列取代了旧的优先级列：扫一份跑过的清单时，读者的第一问是「为什么」，不是「排位」；优先级还在编辑器与排序里，只是不再占一列。行内选择框 + 组头全选 + 底部常驻**串行条**（`● 串行批量运行就绪` + `一次一条：端口与数据库行从不被两条用例共享` + `已选 n/总数` + `触发全量串行运行`），把「Run all」从按钮升级成一个持续可见的承诺。
+4. **详情页升级**：判定卡加 `100% 确定性断言` 徽章与右侧三格指标（断言置信度 / 网络 I/O 往返 / 运行器状态）；新增 **AI 归因条**（`◎ AI triage · Reference only · never overrides the deterministic verdict`——一句话，说清它是观点不是判定）；动作条四按钮（再次运行/编辑测试计划/导出报告/执行历史）。
+
+**验收仍然靠真图**：`npm run preview` 拍 7 页（项目卡、用例矩阵、详情深浅两套 + 数据库/截图/控制台），每张都用真实 Chrome 截屏后逐张看过。本轮真图抓出的三处文字探针看不见的问题：页签行被裁（上面的 flex 教训）、诊断列空白（预览 fixture 缺 run 摘要——**页面没 bug，是喂给它的数据缺一个字段**，这和「检查点页签空白其实是 harness 的 bug」是同一类教训）、`dev/theme.css` 的宿主主题快照在这台 Chrome 里 alias 变量取不到值（声明都在 CSSOM、computedStyle 却为空；七个探针逐步排除后把 `var(--dsw-static-*)` 内联为字面值解决——快照本来就是给预览用的静态文件，内联让它不依赖宿主主题的级联细节；client.js 仍只用 `var(--dsw-alias-*)`，由 host 注入真实主题）。
 
 ### 5.15 数据库前后对比：为什么断言要跑两次
 
@@ -1752,6 +1763,16 @@ GET  /plugins/e2e/api/projects  → warnings [], Record {total:3, passed:1, fail
 还有一个错误**长得像产品 bug、其实是检查器 bug**：检查点页签全空。第一版预览 harness 和文字探针一样用扁平 `hookStates` 数组 + `serialize`/`findNode` 里保存恢复 `hookIndex`，先看用例清单（`CaseTable` 初始化了 `folded`）、再进详情页（`CaseDetail` 的 `useState('checks')` 读回那个 `{}`），六个 `tab === 'x'` 分支全 false。修法是每个组件实例按它在树里的**身份路径**各持一份 hook frame（`frames: Map<path, slot[]>` + `withFrame(path, fn)`），整棵树每轮只 `expand()` 一次；`findNode`/`serialize` 只走纯元素，绝不再调用一次函数组件。`root` 本身也要放进 `expand`，否则 `MainPanel` 的 hooks 落在全局数组、跨轮漂移。**渲染检查器的 bug 长得和产品的 bug 一模一样，而它更容易被相信**——所以文字探针（`render.test.mjs`）故意不抽公共运行时：harness 的 bug 不该同时打坏检查 harness 的东西。
 
 验收后的真图（都逐张看过）：深浅两套配色正常；7 条编号检查点 + 右侧 `PASSED`；请求/响应/日志 rail 在切到 Code 页签后仍然常驻；数据库页两条 `0 → 1` 四列对比；控制台页 18/214 LINES + 8 行级别着色日志；截图页两张缩略图（fixture 里是外链占位，所以图上显示 alt 文本——这是 fixture 的局限，不是渲染缺陷；真机链路见 §12.12 的 7773 字节 PNG）。
+
+### 12.16 Stitch 改版的真图验收：三个文字探针看不见的问题
+
+§5.14.2 的 Stitch 改版完成代码后，`npm test` 十二套全绿，但布局的最终裁判仍是 `npm run preview` 的 7 张真图。这一轮它们抓出的三件事，每件都值得单独记：
+
+1. **顶部导航被压扁**：detail 视图内容长时，`.e2e-root` 把 header 当可收缩 flex 子项压缩到只剩 bar 行，tabs 与 crumbs 被 `overflow: hidden` 裁掉——cases 页内容短，同一份 CSS 在那里完好，所以文字探针（在 cases 页跑的）全绿。修法是 `.e2e-topnav` 与 `.e2e-crumbs` 各加 `flex: 0 0 auto`，注释与 hero 的那条同源：**导航是读者离开这个页面的路，长内容挤掉的必须是页面自己的滚动区，不是导航。**
+2. **诊断列空白**：截图里通过行的诊断列是空的。排查半小时后确认**页面没有 bug**——是预览 fixture 的 `CASE_ENTRY` 缺 `run` 摘要字段，`diagnose()` 拿不到数据只好返回空串。修 fixture 而不是改代码，因为它和「检查点页签空白其实是 harness 的 bug」是同一类教训：**先确认喂进去的数据，再怀疑渲染它的代码。**
+3. **深色主题不生效**：`detail-dark.png` 是白底。追了七轮探针：`data-ds-dark-theme` 属性在、theme.css 三段规则都进了 CSSOM（declarations 82/147/146）、`var()` 嵌套与 `:root` 继承在最小用例里全部正常，但这台 Chrome 对这张表里的变量就是不解析（声明在、computedStyle 为空）。放弃追 Chrome 的级联怪癖，务实收口：把 `dev/theme.css` 里 207 个 `var(--dsw-static-*)` **内联为字面值**（提取脚本收 static 表替换）。快照本来就是静态文件，内联让它不依赖宿主主题的级联细节；`client.js` 仍只用 `var(--dsw-alias-*)`，由 host 注入真实主题，线上行为不变。
+
+顺带修掉一个预览专用 bug：`dev/preview.mjs` 的 `findNode` 内层文字收集只处理字符串与数组 children，**单个元素对象（React stub 对单子节点的形状）被静默丢弃**——REG-001 行三层全是单子节点，文字恒空，详情页拍不出来。React 树遍历必须同时处理 string / array / 单对象三种 children；这与「className 修饰后缀」并列为树遍历的两大高频陷阱。
 
 ---
 

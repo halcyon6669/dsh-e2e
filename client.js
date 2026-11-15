@@ -42,9 +42,6 @@ window.__ModuleLoader__.load({
         'action.run': 'Run',
         'action.running': 'Running…',
         'action.delete': 'Delete',
-        'action.edit': 'Edit',
-        'action.runTest': 'Run test',
-        'action.backToCases': 'Back to test cases',
         'action.deleteConfirm': 'Delete for real',
         'action.explain': 'Why did it fail?',
         'action.explaining': 'Asking the model…',
@@ -130,21 +127,8 @@ window.__ModuleLoader__.load({
         'section.logs': 'Logs',
         'section.database': 'Database',
         'section.timeline': 'Timeline',
-
-        'label.projects': 'Projects',
-        'label.projectName': 'Project',
-        'label.latestResults': 'Latest results',
-        'label.lastActivity': 'Last activity',
-        'label.createdAt': 'Created at',
-        'label.type': 'Type',
-        'label.creator': 'Creator',
         'label.notRun': 'Not run',
-        'label.casesCount': '{count} cases',
-        'label.type.backend': 'Backend',
-        'label.type.frontend': 'Frontend',
-        'label.type.fullstack': 'Full stack',
         'label.type.unknown': 'Unknown',
-        'label.partial': 'partial',
         'action.openProject': 'Open',
         'action.backToProjects': 'All projects',
         'empty.noProjects': 'No projects yet. A project appears here once a case names a target, or a case directory has a case in it.',
@@ -152,8 +136,6 @@ window.__ModuleLoader__.load({
         'time.minutesAgo': '{count}m ago',
         'time.hoursAgo': '{count}h ago',
         'time.daysAgo': '{count}d ago',
-
-        'label.testCases': 'Test cases',
         'label.searchCases': 'Search cases',
         'label.latestStatus': 'Latest status',
         'label.testName': 'Test name',
@@ -204,8 +186,6 @@ window.__ModuleLoader__.load({
         'label.verdictStrict': 'Strict verdict',
         'label.permanentRef': 'Permanent ref',
         'label.runId': 'Run id',
-        'label.checksPassed': 'Checks passed',
-        'label.executionDuration': 'Execution duration',
         'label.fatalBoundary': 'Fatal boundary',
         'label.none': 'none',
         'label.expected': 'expected',
@@ -227,10 +207,8 @@ window.__ModuleLoader__.load({
         'label.trace': 'Trace',
 
         'action.editTestPlan': 'Edit test plan',
-        'action.addMoreTests': 'Add more tests',
         'action.foldGroup': 'Fold this group',
         'action.expandGroup': 'Expand this group',
-        'action.runAll': 'Run all {count}',
         'action.done': 'Done',
         'action.saveChanges': 'Save changes',
         'action.addTest': 'Add test',
@@ -242,13 +220,6 @@ window.__ModuleLoader__.load({
         'status.passed': 'Passed',
         'status.failed': 'Failed',
         'status.blocked': 'Blocked',
-
-        'summary.empty': 'no tests',
-        'summary.allPassed': 'all passed',
-        'summary.someFailed': '{count} failed',
-        'summary.someBlocked': '{count} blocked',
-        'summary.someRunning': '{count} running',
-        'summary.someUnrun': '{count} not run',
 
         'field.title': 'Test name',
         'field.caseId': 'Case id',
@@ -264,6 +235,42 @@ window.__ModuleLoader__.load({
         'empty.noSearchResults': 'No test matches "{query}".',
         'notice.batchStarted': 'Running {count} cases in order — they go one at a time so two cases cannot write the same rows.',
         'notice.fieldsSaved': 'Saved {file}.',
+        'label.env': 'ENV',
+        'label.origin': 'ORIGIN',
+        'label.suite': 'SUITE',
+        'label.suiteAll': 'ALL',
+        'nav.tab.cases': 'Cases',
+        'nav.tab.detail': 'Evidence',
+        'nav.tab.plan': 'Test plan',
+        'action.runSelected': 'Run selected',
+        'action.runFullRegression': 'Run full regression',
+        'action.refreshScan': 'Refresh scan',
+        'label.diagnostic': 'Diagnostics',
+        'label.actions': 'Actions',
+        'label.selectCase': 'Select this case',
+        'label.selectAll': 'Select every case in this group',
+        'label.selectedCases': '{count}/{total} selected',
+        'action.runSerial': 'Trigger serial run',
+        'label.serialReady': 'Serial batch ready',
+        'label.serialHint': 'One case at a time: the port and the database rows are never shared between two cases.',
+        'label.passRate': 'Pass rate',
+        'label.lastInspected': 'Last activity',
+        'diag.passed': '{checks} checks · {duration} ms',
+        'diag.planned': 'Awaiting its first run · {steps} steps',
+        'diag.blocked': 'Refused before dialing',
+        'diag.generated': 'Ready to run · {steps} steps',
+        'action.openEvidence': 'Evidence',
+        'action.replay': 'Replay',
+        'label.deterministic': '100% deterministic assertion',
+        'label.assertionConfidence': 'Assertion confidence',
+        'label.wireRounds': 'Wire rounds',
+        'label.stateMachine': 'Runner state',
+        'label.stateSynced': 'SYNCED',
+        'action.runAgain': 'Run again',
+        'action.exportReport': 'Export report',
+        'action.runHistory': 'Run history ({count})',
+        'label.aiAttribution': 'AI triage',
+        'label.aiDisclaimer': 'Reference only · never overrides the deterministic verdict',
       },
       zh: {
         'panel.title': '端到端测试',
@@ -280,9 +287,6 @@ window.__ModuleLoader__.load({
         'action.run': '运行',
         'action.running': '运行中…',
         'action.delete': '删除',
-        'action.edit': '编辑',
-        'action.runTest': '运行用例',
-        'action.backToCases': '返回用例列表',
         'action.deleteConfirm': '确认删除',
         'action.explain': '为什么失败？',
         'action.explaining': '正在询问模型…',
@@ -295,8 +299,6 @@ window.__ModuleLoader__.load({
         'action.retry': '重试',
         'action.reopen': '打开',
         'action.loading': '加载中…',
-
-        'label.testCases': '测试用例',
         'label.editor': '用例文件',
         'label.run': '运行',
         'label.reports': '最近运行',
@@ -369,21 +371,8 @@ window.__ModuleLoader__.load({
         'section.logs': '日志',
         'section.database': '数据库',
         'section.timeline': '时间线',
-
-        'label.projects': '项目',
-        'label.projectName': '项目',
-        'label.latestResults': '最近结果',
-        'label.lastActivity': '最近活动',
-        'label.createdAt': '创建时间',
-        'label.type': '类型',
-        'label.creator': '创建者',
         'label.notRun': '未运行',
-        'label.casesCount': '{count} 个用例',
-        'label.type.backend': '后端',
-        'label.type.frontend': '前端',
-        'label.type.fullstack': '全栈',
         'label.type.unknown': '未知',
-        'label.partial': '部分完成',
         'action.openProject': '打开',
         'action.backToProjects': '全部项目',
         'empty.noProjects': '还没有项目。用例引用了 target，或者某个用例目录里有用例，项目就会出现在这里。',
@@ -391,8 +380,6 @@ window.__ModuleLoader__.load({
         'time.minutesAgo': '{count} 分钟前',
         'time.hoursAgo': '{count} 小时前',
         'time.daysAgo': '{count} 天前',
-
-        'label.testCases': '测试用例',
         'label.searchCases': '搜索用例',
         'label.latestStatus': '最新状态',
         'label.testName': '用例名称',
@@ -440,8 +427,6 @@ window.__ModuleLoader__.load({
         'label.verdictStrict': '严格判定',
         'label.permanentRef': '永久编号',
         'label.runId': '运行 ID',
-        'label.checksPassed': '检查点通过',
-        'label.executionDuration': '执行耗时',
         'label.fatalBoundary': '致命边界',
         'label.none': '无',
         'label.expected': '期望',
@@ -463,10 +448,8 @@ window.__ModuleLoader__.load({
         'label.trace': '追踪',
 
         'action.editTestPlan': '编辑测试计划',
-        'action.addMoreTests': '添加更多用例',
         'action.foldGroup': '收起这一组',
         'action.expandGroup': '展开这一组',
-        'action.runAll': '全部运行 {count} 个',
         'action.done': '完成',
         'action.saveChanges': '保存改动',
         'action.addTest': '添加用例',
@@ -478,13 +461,6 @@ window.__ModuleLoader__.load({
         'status.passed': '通过',
         'status.failed': '失败',
         'status.blocked': '被拦下',
-
-        'summary.empty': '没有用例',
-        'summary.allPassed': '全部通过',
-        'summary.someFailed': '{count} 个失败',
-        'summary.someBlocked': '{count} 个被拦下',
-        'summary.someRunning': '{count} 个运行中',
-        'summary.someUnrun': '{count} 个未运行',
 
         'field.title': '用例名称',
         'field.caseId': '用例编号',
@@ -500,6 +476,42 @@ window.__ModuleLoader__.load({
         'empty.noSearchResults': '没有用例匹配「{query}」。',
         'notice.batchStarted': '按顺序运行 {count} 个用例——一次一个，否则两个用例会写同一批数据行。',
         'notice.fieldsSaved': '已保存 {file}。',
+        'label.env': '环境',
+        'label.origin': 'ORIGIN',
+        'label.suite': 'SUITE',
+        'label.suiteAll': '全部',
+        'nav.tab.cases': '项目与用例清单',
+        'nav.tab.detail': '用例详情与证据',
+        'nav.tab.plan': '测试计划编辑',
+        'action.runSelected': '运行选中用例',
+        'action.runFullRegression': '执行全量回归',
+        'action.refreshScan': '刷新扫描',
+        'label.diagnostic': '诊断与异常',
+        'label.actions': '操作',
+        'label.selectCase': '选中这条用例',
+        'label.selectAll': '选中这一组的全部用例',
+        'label.selectedCases': '已选用例: {count}/{total}',
+        'action.runSerial': '触发全量串行运行',
+        'label.serialReady': '串行批量运行就绪',
+        'label.serialHint': '一次只跑一条：端口和数据库行永远不会被两个用例同时占用。',
+        'label.passRate': '通过率',
+        'label.lastInspected': '最近活动',
+        'diag.passed': '{checks} 项检查 · {duration} ms',
+        'diag.planned': '待运行 · {steps} 步',
+        'diag.blocked': '拨号之前被护栏拒绝',
+        'diag.generated': '可以运行 · {steps} 步',
+        'action.openEvidence': '查看证据',
+        'action.replay': '重放',
+        'label.deterministic': '100% 确定性断言',
+        'label.assertionConfidence': '断言置信度',
+        'label.wireRounds': '网络往返',
+        'label.stateMachine': '运行状态',
+        'label.stateSynced': '已同步',
+        'action.runAgain': '再次运行',
+        'action.exportReport': '导出报告',
+        'action.runHistory': '执行历史 ({count})',
+        'label.aiAttribution': 'AI 归因排查辅助解析',
+        'label.aiDisclaimer': '仅供排查参考 · 永不干预确定性裁决',
       },
     }
 
@@ -644,47 +656,16 @@ window.__ModuleLoader__.load({
       return new Date(at).toLocaleString()
     }
 
-    /**
-     * The three numbers in "Latest results".
-     *
-     * Green, red and grey rather than one summary word, because the interesting
-     * state is the mixed one: "2 passed, 1 failed" says something a single
-     * "failed" chip cannot.
-     */
-    function ResultCounts({ t, counts }) {
-      if (!counts || counts.total === 0) {
-        return h(Chip, { tone: 'idle' }, t('label.notRun'))
-      }
-      const parts = []
-      if (counts.passed > 0) parts.push(h(Chip, { key: 'p', tone: 'pass' }, `✓ ${counts.passed}`))
-      if (counts.failed > 0) parts.push(h(Chip, { key: 'f', tone: 'fail' }, `✕ ${counts.failed}`))
-      // "not run" and "partial" are different things, and the difference is the
-      // point: a suite where nothing has run yet is not half-finished work.
-      if (counts.notRun > 0) {
-        parts.push(
-          h(
-            Chip,
-            { key: 'n', tone: 'warn', title: counts.passed > 0 || counts.failed > 0 ? t('label.partial') : undefined },
-            `— ${counts.notRun}`,
-          ),
-        )
-      }
-      return h('div', { className: 'e2e-result-counts' }, parts)
-    }
 
-    function TypeChip({ t, type }) {
-      const label = type ? t(`label.type.${type}`) : t('label.type.unknown')
-      return h('span', { className: 'e2e-type-chip' }, h('span', { className: 'e2e-type-dot' }), label)
-    }
 
     /**
-     * The landing page: one row per project.
+     * The landing page: one card per project, after the Stitch design.
      *
-     * Modelled on the test-management page this plugin is meant to live beside —
-     * name, latest results, last activity, created at, type, creator — because
-     * that is the shape people already read a suite in. Everything shown here
-     * comes from `/projects`; nothing is recomputed in the browser, so the page
-     * and the agent can never disagree about a count.
+     * The old table answered "what is in the suite" with six columns; the design
+     * answers it with a headline number and a segmented bar, which is what a
+     * reader actually scans. Everything shown still comes from `/projects` —
+     * the percentages are derived from counts the Host already computed, so the
+     * page and the agent can never disagree about them.
      */
     function ProjectTable({ t, projects, onOpen, creator }) {
       if (!projects || projects.length === 0) {
@@ -692,49 +673,71 @@ window.__ModuleLoader__.load({
       }
       return h(
         'div',
-        { className: 'e2e-table' },
-        h(
-          'div',
-          { className: 'e2e-table-head' },
-          h('span', { className: 'e2e-col-name' }, t('label.projectName')),
-          h('span', { className: 'e2e-col-results' }, t('label.latestResults')),
-          h('span', { className: 'e2e-col-activity' }, t('label.lastActivity')),
-          h('span', { className: 'e2e-col-created' }, t('label.createdAt')),
-          h('span', { className: 'e2e-col-type' }, t('label.type')),
-          h('span', { className: 'e2e-col-creator' }, t('label.creator')),
-        ),
-        projects.map((project) =>
-          h(
+        { className: 'e2e-project-grid' },
+        projects.map((project) => {
+          const counts = project.counts || { total: 0, passed: 0, failed: 0, notRun: 0, blocked: 0 }
+          const total = counts.total || 0
+          const pct = (value) => (total > 0 ? `${Math.round((value / total) * 1000) / 10}%` : '0%')
+          const rate = total > 0 ? pct(counts.passed) : '—'
+          const allPassed = total > 0 && counts.passed === total
+          return h(
             'button',
             {
               key: project.key,
               type: 'button',
-              className: 'e2e-table-row',
+              className: 'e2e-project-card',
               onClick: () => onOpen(project),
               title: `${t('action.openProject')} — ${project.projectPath || project.baseUrl || project.key}`,
             },
             h(
-              'span',
-              { className: 'e2e-col-name' },
-              h('span', { className: 'e2e-project-icon' }, '▤'),
-              h('span', { className: 'e2e-project-name' }, project.name),
-              h('span', { className: 'e2e-muted e2e-project-targets' }, t('label.casesCount', { count: project.counts.total })),
+              'div',
+              { className: 'e2e-project-head' },
+              h(
+                'div',
+                { className: 'e2e-project-title' },
+                h('span', { className: `e2e-project-dot${allPassed ? '' : ' is-pulse'}` }),
+                h('strong', null, project.name),
+                h('span', { className: 'e2e-project-badge' }, (project.type || '').toUpperCase() || t('label.type.unknown')),
+              ),
+              h(
+                'div',
+                { className: 'e2e-project-rate' },
+                h('span', { className: 'e2e-project-rate-label' }, t('label.passRate')),
+                h('span', { className: 'e2e-project-rate-value' }, rate),
+              ),
             ),
-            h('span', { className: 'e2e-col-results' }, h(ResultCounts, { t, counts: project.counts })),
             h(
-              'span',
-              { className: 'e2e-col-activity', title: absoluteTime(project.lastActivityAt) },
-              relativeTime(t, project.lastActivityAt),
+              'div',
+              { className: 'e2e-project-stack' },
+              h('span', null, project.projectPath || project.baseUrl || project.key),
+              h('span', { className: 'e2e-project-stack-target' }, project.targets && project.targets.length ? project.targets.map((item) => item.name).join(', ') : ''),
             ),
+            total > 0
+              ? h(
+                  'div',
+                  { className: 'e2e-project-track' },
+                  h('div', { className: 'e2e-project-seg is-pass', style: { flexGrow: Math.max(counts.passed, 0.001) }, title: `${counts.passed} ${t('status.passed')}` }),
+                  h('div', { className: 'e2e-project-seg is-fail', style: { flexGrow: Math.max(counts.failed, 0.001) }, title: `${counts.failed} ${t('status.failed')}` }),
+                  h('div', { className: 'e2e-project-seg is-blocked', style: { flexGrow: Math.max(counts.blocked || 0, 0.001) }, title: `${counts.blocked || 0} ${t('status.blocked')}` }),
+                  h('div', { className: 'e2e-project-seg is-planned', style: { flexGrow: Math.max(counts.notRun, 0.001) }, title: `${counts.notRun} ${t('label.notRun')}` }),
+                )
+              : h('div', { className: 'e2e-project-track e2e-project-track-empty' }),
             h(
-              'span',
-              { className: 'e2e-col-created', title: absoluteTime(project.firstSeenAt) },
-              absoluteTime(project.firstSeenAt),
+              'div',
+              { className: 'e2e-project-legend' },
+              h('span', { className: 'e2e-project-legend-item is-pass' }, `${counts.passed} ${t('status.passed')}`),
+              h('span', { className: 'e2e-project-legend-item is-fail' }, `${counts.failed} ${t('status.failed')}`),
+              h('span', { className: 'e2e-project-legend-item is-blocked' }, `${counts.blocked || 0} ${t('status.blocked')}`),
+              h('span', { className: 'e2e-project-legend-item is-planned' }, `${counts.notRun} ${t('label.notRun')}`),
+              h('div', { className: 'e2e-spacer' }),
+              h(
+                'span',
+                { className: 'e2e-project-when', title: absoluteTime(project.lastActivityAt) },
+                `${t('label.lastInspected')}: ${relativeTime(t, project.lastActivityAt)}`,
+              ),
             ),
-            h('span', { className: 'e2e-col-type' }, h(TypeChip, { t, type: project.type })),
-            h('span', { className: 'e2e-col-creator' }, h('span', { className: 'e2e-avatar' }, (creator || '?').slice(0, 2).toUpperCase())),
-          ),
-        ),
+          )
+        }),
       )
     }
 
@@ -754,62 +757,24 @@ window.__ModuleLoader__.load({
       return h(Chip, { tone: STATUS_TONES[status] || 'idle' }, t(`status.${status || 'planned'}`))
     }
 
+
+
     /**
-     * "6 tests · all passed" — the sentence on a group header.
+     * The test-case matrix for one project, after the Stitch design: status
+     * tabs, a search box, and rows grouped by use case, each row carrying a
+     * checkbox, a diagnosis cell and inline actions.
      *
-     * The counts arrive from the Host; this only picks which one to lead with,
-     * because a group where everything passed and a group where one case failed
-     * are different headlines even when they have the same number of tests.
-     */
-    function groupSummary(t, summary) {
-      if (!summary || summary.counts.total === 0) return t('summary.empty')
-      const label = {
-        allPassed: () => t('summary.allPassed'),
-        someFailed: () => t('summary.someFailed', { count: summary.counts.failed }),
-        someBlocked: () => t('summary.someBlocked', { count: summary.counts.blocked }),
-        someRunning: () => t('summary.someRunning', { count: summary.counts.running }),
-        someUnrun: () => t('summary.someUnrun', { count: summary.counts.planned + summary.counts.generated }),
-      }[summary.label]
-      return label ? label() : t('summary.empty')
-    }
-
-    /** A thin bar showing how much of a group passed — the same shape as the row above it. */
-    function GroupBar({ summary }) {
-      const counts = (summary && summary.counts) || { total: 0 }
-      const total = counts.total || 0
-      if (total === 0) return null
-      const segment = (count, tone) =>
-        count > 0 ? h('span', { className: 'e2e-bar-seg', style: { flexGrow: count, background: TONES[tone] } }) : null
-      return h(
-        'span',
-        { className: 'e2e-bar' },
-        segment(counts.passed, 'pass'),
-        segment(counts.failed, 'fail'),
-        segment(counts.blocked, 'warn'),
-        segment(counts.running, 'brand'),
-        segment(counts.planned + counts.generated, 'idle'),
-      )
-    }
-
-    /**
-     * The test-case list for one project: status tabs, a search box, and rows
-     * grouped by use case.
+     * The diagnosis cell is the one column that did not exist before: a reader
+     * scanning a failed suite asks "why" before "what", and the last error is
+     * the honest short answer. It comes from the run the Host already matched.
      *
      * Grouped by use case rather than by endpoint because that is the unit a
-     * reader thinks in ("checkout", "registration"); the endpoint is still on the
-     * row, so the grouping never hides the route.
+     * reader thinks in; the endpoint is still on the row, so the grouping never
+     * hides the route.
      */
-    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onEditPlan, onAddTests, onRunAll, running }) {
+    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onEditPlan, onAddTests, onRunAll, running, checked, onToggleChecked, onRunSelected }) {
       const counts = project.statusCounts || { all: 0 }
       const tabs = ['all', 'planned', 'generated', 'running', 'passed', 'failed', 'blocked']
-      /**
-       * A group folds. "Run all 62" is a list you scan, and a use case with
-       * twenty rows pushes the next one off the screen — the header keeps the
-       * counts, so a folded group still says whether it needs opening.
-       *
-       * Kept per table instance, not per group object: the Host sends a fresh
-       * list on every refresh, and folding must survive that.
-       */
       const [folded, setFolded] = React.useState({})
       const toggle = (name) => setFolded((state) => ({ ...state, [name]: !state[name] }))
       const needle = String(query || '').trim().toLowerCase()
@@ -827,6 +792,19 @@ window.__ModuleLoader__.load({
         .filter((bucket) => bucket.cases.length > 0)
 
       const total = groups.reduce((sum, bucket) => sum + bucket.cases.length, 0)
+      const selectedCount = (project.cases || []).filter((entry) => checked[entry.file]).length
+
+      const groupEndpoint = (bucket) => (bucket.endpoint ? [bucket.endpoint] : [])
+      const diagnose = (entry) => {
+        if (entry.status === 'planned') return { text: t('diag.planned', { steps: (entry.steps || []).length }), tone: 'idle' }
+        if (entry.status === 'generated') return { text: t('diag.generated', { steps: (entry.steps || []).length }), tone: 'idle' }
+        if (entry.status === 'blocked') return { text: entry.blockedReason || t('diag.blocked'), tone: 'warn' }
+        if (entry.run && entry.run.summary) {
+          const s = entry.run.summary
+          return { text: t('diag.passed', { checks: s.checks ?? 0, duration: s.durationMs ?? 0 }), tone: 'pass' }
+        }
+        return { text: '', tone: 'idle' }
+      }
 
       return h(
         'div',
@@ -834,15 +812,26 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'e2e-cases-bar' },
-          h('span', { className: 'e2e-label' }, t('label.testCases')),
-          h('div', { className: 'e2e-spacer' }),
-          h(Btn, { small: true, onClick: onEditPlan }, t('action.editTestPlan')),
-          h(Btn, { small: true, onClick: onAddTests }, t('action.addMoreTests')),
           h(
-            Btn,
-            { small: true, variant: 'primary', onClick: onRunAll, disabled: running || counts.all === 0 },
-            running ? t('action.running') : t('action.runAll', { count: counts.all }),
+            'div',
+            { className: 'e2e-tabs' },
+            tabs.map((tab) =>
+              h(
+                'button',
+                {
+                  key: tab,
+                  type: 'button',
+                  className: `e2e-tab${filter === tab ? ' is-active' : ''}`,
+                  onClick: () => onFilter(tab),
+                },
+                t(`status.${tab}`),
+                h('span', { className: 'e2e-tab-count' }, String(counts[tab] ?? 0)),
+              ),
+            ),
           ),
+          h('div', { className: 'e2e-spacer' }),
+          h(Btn, { small: true, onClick: onEditPlan }, t('action.refreshScan')),
+          h(Btn, { small: true, onClick: onAddTests }, t('action.new')),
         ),
         h(
           'div',
@@ -856,90 +845,136 @@ window.__ModuleLoader__.load({
         ),
         h(
           'div',
-          { className: 'e2e-tabs' },
-          tabs.map((tab) =>
-            h(
-              'button',
-              {
-                key: tab,
-                type: 'button',
-                className: `e2e-tab${filter === tab ? ' is-active' : ''}`,
-                onClick: () => onFilter(tab),
-              },
-              t(`status.${tab}`),
-              h('span', { className: 'e2e-tab-count' }, String(counts[tab] ?? 0)),
-            ),
-          ),
-        ),
-        h(
-          'div',
           { className: 'e2e-cases-head' },
+          h('span', { className: 'e2e-col-check' }),
           h('span', { className: 'e2e-col-id' }, 'ID'),
-          h('span', { className: 'e2e-col-status' }, t('label.latestStatus')),
           h('span', { className: 'e2e-col-name' }, t('label.testName')),
-          h('span', { className: 'e2e-col-priority' }, t('field.priority')),
+          h('span', { className: 'e2e-col-status' }, t('label.latestStatus')),
+          h('span', { className: 'e2e-col-diagnostic' }, t('label.diagnostic')),
+          h('span', { className: 'e2e-col-actions' }, t('label.actions')),
         ),
         total === 0
           ? h('div', { className: 'e2e-empty-box' }, needle ? t('empty.noSearchResults', { query }) : t('empty.noCases'))
           : groups.map((bucket) => {
               const isFolded = Boolean(folded[bucket.name])
+              const groupAllChecked = bucket.cases.every((entry) => checked[entry.file])
               return h(
                 'div',
                 { key: bucket.name, className: `e2e-plan-group${isFolded ? ' is-folded' : ''}` },
                 h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'e2e-plan-group-head',
-                    // The chevron says "this opens"; the title says what a click does.
-                    title: isFolded ? t('action.expandGroup') : t('action.foldGroup'),
-                    'aria-expanded': isFolded ? 'false' : 'true',
-                    onClick: () => toggle(bucket.name),
-                  },
+                  'div',
+                  { className: 'e2e-plan-group-head' },
+                  h('input', {
+                    type: 'checkbox',
+                    className: 'e2e-case-check',
+                    title: t('label.selectAll'),
+                    checked: groupAllChecked,
+                    onChange: () =>
+                      bucket.cases.forEach((entry) => {
+                        if (groupAllChecked === Boolean(checked[entry.file])) onToggleChecked(entry.file)
+                      }),
+                  }),
                   h('span', { className: 'e2e-chevron', 'aria-hidden': 'true' }, isFolded ? '▸' : '▾'),
                   h('span', { className: 'e2e-plan-group-name', title: t('label.group') }, bucket.name),
-                  h('span', { className: 'e2e-muted' }, t('label.tests', { count: bucket.summary.counts.total })),
-                  bucket.summary.counts.error > 0
-                    ? h(
-                        Chip,
-                        { tone: 'error', title: t('label.scenarioHint') },
-                        `${bucket.summary.counts.error} ${t('label.errorScenarios')}`,
-                      )
-                    : null,
-                  h('span', { className: 'e2e-muted' }, '·'),
-                  h('span', { className: 'e2e-muted' }, groupSummary(t, bucket.summary)),
+                  groupEndpoint(bucket).map((endpoint) => h('code', { key: endpoint, className: 'e2e-endpoint-tag' }, endpoint)),
+                  h('span', { className: 'e2e-muted' }, `[${t('label.tests', { count: bucket.summary.counts.total })}]`),
                   h('div', { className: 'e2e-spacer' }),
-                  h(GroupBar, { summary: bucket.summary }),
+                  h(
+                    'span',
+                    { className: 'e2e-group-balance' },
+                    h('span', { className: 'e2e-group-balance-pass' }, `${bucket.summary.counts.passed} ${t('status.passed')}`),
+                    bucket.summary.counts.failed > 0
+                      ? h('span', { className: 'e2e-group-balance-fail' }, ` / ${bucket.summary.counts.failed} ${t('status.failed')}`)
+                      : null,
+                    bucket.summary.counts.error > 0
+                      ? h('span', { className: 'e2e-group-balance-error', title: t('label.errorScenarios') }, ` · ${bucket.summary.counts.error}✗`)
+                      : null,
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'e2e-chevron e2e-group-fold',
+                      title: isFolded ? t('action.expandGroup') : t('action.foldGroup'),
+                      'aria-expanded': isFolded ? 'false' : 'true',
+                      onClick: () => toggle(bucket.name),
+                    },
+                    isFolded ? '▸' : '▾',
+                  ),
                 ),
                 isFolded
                   ? null
-                  : bucket.cases.map((entry) =>
-                      h(
-                        'button',
-                        {
-                          key: entry.file,
-                          type: 'button',
-                          className: 'e2e-case-row',
-                          onClick: () => onOpen(entry.file),
-                        },
-                        h('span', { className: 'e2e-col-id' }, entry.caseId || entry.id),
-                        h('span', { className: 'e2e-col-status' }, h(StatusChip, { t, status: entry.status })),
+                  : bucket.cases.map((entry) => {
+                      const diagnosis = diagnose(entry)
+                      return h(
+                        'div',
+                        { key: entry.file, className: 'e2e-case-row' },
+                        h('input', {
+                          type: 'checkbox',
+                          className: 'e2e-case-check',
+                          title: t('label.selectCase'),
+                          checked: Boolean(checked[entry.file]),
+                          onChange: () => onToggleChecked(entry.file),
+                        }),
                         h(
-                          'span',
-                          { className: 'e2e-col-name' },
-                          h('span', { className: 'e2e-test-name' }, entry.title || entry.id),
-                          entry.endpoint ? h('code', { className: 'e2e-endpoint-tag' }, entry.endpoint) : null,
+                          'button',
+                          { type: 'button', className: 'e2e-case-open', onClick: () => onOpen(entry.file), title: entry.file },
+                          h(
+                            'span',
+                            { className: 'e2e-col-id' },
+                            h(
+                              'span',
+                              { className: `e2e-case-id ${entry.status === 'failed' ? 'is-failed' : entry.status === 'planned' ? 'is-planned' : ''}` },
+                              entry.caseId || entry.id,
+                            ),
+                          ),
+                          h(
+                            'span',
+                            { className: 'e2e-col-name' },
+                            h('span', { className: 'e2e-test-name' }, entry.title || entry.id),
+                            entry.endpoint ? h('code', { className: 'e2e-endpoint-tag' }, entry.endpoint) : null,
+                          ),
+                          h('span', { className: 'e2e-col-status' }, h(StatusChip, { t, status: entry.status })),
+                          h(
+                            'span',
+                            { className: `e2e-col-diagnostic is-${diagnosis.tone}` },
+                            diagnosis.text,
+                          ),
                         ),
                         h(
                           'span',
-                          { className: 'e2e-col-priority' },
-                          h(Chip, { tone: entry.priority === 'high' ? 'warn' : 'idle' }, t(`label.priority.${entry.priority || 'medium'}`)),
-                          h('span', { className: 'e2e-muted' }, t('label.steps', { count: (entry.steps || []).length })),
+                          { className: 'e2e-col-actions' },
+                          h(
+                            'button',
+                            { type: 'button', className: 'e2e-icon-btn', title: t('action.replay'), onClick: () => onRunSelected([entry.file]) },
+                            '▶',
+                          ),
+                          h(
+                            'button',
+                            { type: 'button', className: 'e2e-icon-btn', title: t('action.openEvidence'), onClick: () => onOpen(entry.file) },
+                            '◎',
+                          ),
                         ),
-                      ),
-                    ),
+                      )
+                    }),
               )
             }),
+        total > 0
+          ? h(
+              'div',
+              { className: 'e2e-serial-bar' },
+              h('span', { className: 'e2e-serial-dot', 'aria-hidden': 'true' }),
+              h('span', { className: 'e2e-serial-ready' }, t('label.serialReady')),
+              h('span', { className: 'e2e-muted' }, t('label.serialHint')),
+              h('div', { className: 'e2e-spacer' }),
+              h('span', { className: 'e2e-serial-count' }, t('label.selectedCases', { count: selectedCount, total: counts.all })),
+              h(
+                Btn,
+                { small: true, primary: true, disabled: running || selectedCount === 0, onClick: () => onRunSelected((project.cases || []).filter((entry) => checked[entry.file]).map((entry) => entry.file)) },
+                running ? t('action.running') : t('action.runSerial'),
+              ),
+            )
+          : null,
       )
     }
 
@@ -1566,69 +1601,117 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'e2e-detail' },
-        // ---- the verdict card: one glance answers "is this green, and why" ----
+        // ---- the action bar: what a reader does, before what a reader reads ----
+        h(
+          'div',
+          { className: 'e2e-detail-head' },
+          h(
+            'div',
+            { className: 'e2e-detail-crumbs' },
+            `${t('label.testCase')} · `,
+            h('span', { className: 'e2e-detail-crumb is-ref' }, caseId),
+            h('span', { className: 'e2e-crumb-sep' }, '/'),
+            h('span', { className: 'e2e-detail-crumb' }, environment.configurationName || environment.target || '—'),
+            definition && definition.group ? h('span', { className: 'e2e-crumb-sep' }, '/') : null,
+            definition && definition.group ? h('span', { className: 'e2e-detail-crumb' }, definition.group) : null,
+            definition && definition.endpoint
+              ? h('span', { className: 'e2e-detail-env' }, definition.endpoint)
+              : null,
+          ),
+          h('div', { className: 'e2e-spacer' }),
+          h(Btn, { small: true, primary: true, onClick: onRun, disabled: running }, running ? t('action.running') : t('action.runAgain')),
+          h(Btn, { small: true, onClick: onEdit }, t('action.editTestPlan')),
+          shown && shown.path
+            ? h(Btn, { small: true, onClick: () => onOpenReport(shown.path) }, t('action.exportReport'))
+            : null,
+          h(
+            Btn,
+            {
+              small: true,
+              onClick: () => {
+                const last = history && history[0]
+                if (last && onOpenRun) onOpenRun(last.path)
+                setTab('history')
+              },
+            },
+            t('action.runHistory', { count: (history || []).length }),
+          ),
+        ),
+        // ---- the verdict banner: one glance answers "is this green, and why" ----
         h(
           'div',
           { className: 'e2e-hero' },
           h(
             'div',
-            { className: 'e2e-hero-top' },
-            h(
-              'span',
-              { className: 'e2e-verdict-badge', style: { color: TONES[verdictTone(statusKey === 'blocked' ? 'refused' : statusKey)] } },
-              `${t('label.verdictStrict')}: ${String(statusWord).toUpperCase()}`,
-            ),
-            h('span', { className: 'e2e-hero-ref' }, `${t('label.permanentRef')} · ${caseId}`),
-            report && report.runId ? h('span', { className: 'e2e-hero-run' }, `${t('label.runId')}: ${report.runId}`) : null,
-            h('span', { className: 'e2e-spacer' }),
-            h(Btn, { small: true, variant: 'primary', onClick: onRun, disabled: running }, running ? t('action.running') : t('action.runTest')),
-            h(Btn, { small: true, onClick: onEdit }, t('action.edit')),
-            h(Btn, { small: true, onClick: onDone }, t('action.backToCases')),
-          ),
-          h(
-            'div',
             { className: 'e2e-hero-main' },
             h(
               'div',
-              { className: 'e2e-hero-text' },
-              h('div', { className: 'e2e-detail-kicker' }, `${t('label.testCase')} · ${caseId}`),
-              h('h3', { className: 'e2e-hero-title' }, `${caseId} · ${title}`),
-              definition && definition.description
-                ? h('p', { className: 'e2e-hero-desc' }, definition.description)
-                : null,
+              { className: 'e2e-hero-id' },
               h(
-                'div',
-                { className: 'e2e-specs' },
-                definition && definition.endpoint ? h(SpecTag, { name: t('field.endpoint'), value: definition.endpoint }) : null,
-                definition && definition.scenario ? h(SpecTag, { name: t('field.scenario'), value: t(`label.scenario.${definition.scenario}`) }) : null,
-                definition && definition.priority ? h(SpecTag, { name: t('field.priority'), value: t(`label.priority.${definition.priority}`) }) : null,
-                definition && definition.group ? h(SpecTag, { name: t('field.group'), value: definition.group }) : null,
-                environment.target ? h(SpecTag, { name: 'target', value: environment.target }) : null,
-                environment.baseUrl ? h(SpecTag, { name: 'baseUrl', value: environment.baseUrl }) : null,
+                'span',
+                { className: 'e2e-verdict-badge', style: { color: TONES[verdictTone(statusKey === 'blocked' ? 'refused' : statusKey)] } },
+                `${t('label.verdictStrict')}: ${String(statusWord).toUpperCase()}`,
+              ),
+              h('span', { className: 'e2e-hero-deterministic' }, t('label.deterministic')),
+            ),
+            h('h3', { className: 'e2e-hero-title' }, `${caseId} · ${title}`),
+            definition && definition.description ? h('p', { className: 'e2e-hero-desc' }, definition.description) : null,
+            h(
+              'div',
+              { className: 'e2e-hero-meta' },
+              h('span', { className: 'e2e-hero-ref' }, `${t('label.permanentRef')}: ${caseId}`),
+              report && report.runId ? h('span', { className: 'e2e-hero-run' }, `${t('label.runId')}: ${report.runId}`) : null,
+              h(
+                'span',
+                { className: checks.length > 0 && passed === checks.length ? 'e2e-hero-count is-pass' : 'e2e-hero-count' },
+                `${passed}/${checks.length}`,
+              ),
+              h('span', { className: 'e2e-hero-meta-item' }, durationMs === null || durationMs === undefined ? '—' : `${durationMs} ms`),
+              h(
+                'span',
+                { className: `e2e-hero-meta-item${fatal ? ' is-fail' : ' is-pass'}` },
+                `${t('label.fatalBoundary')}: ${fatal ? String(fatal.name || fatal.message || 'fatal') : t('label.none')}`,
               ),
             ),
             h(
               'div',
-              { className: 'e2e-metrics' },
-              h(Metric, {
-                label: t('label.checksPassed'),
-                value: `${passed}/${checks.length}`,
-                note: verdict ? statusWord : t('label.neverRun'),
-                tone: checks.length > 0 && passed === checks.length ? TONES.pass : checks.length > 0 ? TONES.fail : undefined,
-              }),
-              h(Metric, {
-                label: t('label.executionDuration'),
-                value: durationMs === null || durationMs === undefined ? '—' : `${durationMs} ms`,
-                note: latest ? relativeTime(t, latest.startedAt) : t('label.neverRun'),
-              }),
-              h(Metric, {
-                label: t('label.fatalBoundary'),
-                value: fatal ? String(fatal.name || fatal.message || 'fatal') : t('label.none'),
-                note: fatal ? String(fatal.message || '') : t('label.cleanTeardown'),
-                tone: fatal ? TONES.fail : TONES.pass,
-              }),
+              { className: 'e2e-specs' },
+              definition && definition.endpoint ? h(SpecTag, { name: t('field.endpoint'), value: definition.endpoint }) : null,
+              definition && definition.scenario ? h(SpecTag, { name: t('field.scenario'), value: t(`label.scenario.${definition.scenario}`) }) : null,
+              definition && definition.priority ? h(SpecTag, { name: t('field.priority'), value: t(`label.priority.${definition.priority}`) }) : null,
+              definition && definition.group ? h(SpecTag, { name: t('field.group'), value: definition.group }) : null,
+              environment.target ? h(SpecTag, { name: 'target', value: environment.target }) : null,
+              environment.baseUrl ? h(SpecTag, { name: 'baseUrl', value: environment.baseUrl }) : null,
             ),
           ),
+          h(
+            'div',
+            { className: 'e2e-metrics' },
+            h(Metric, {
+              label: t('label.assertionConfidence'),
+              value: checks.length > 0 ? `${Math.round((passed / checks.length) * 1000) / 10}%` : '—',
+              note: verdict ? statusWord : t('label.neverRun'),
+              tone: checks.length > 0 && passed === checks.length ? TONES.pass : checks.length > 0 ? TONES.fail : undefined,
+            }),
+            h(Metric, {
+              label: t('label.wireRounds'),
+              value: `${steps.filter((step) => step.kind && step.kind.indexOf('setup.http') === 0).length + 1}`,
+              note: durationMs === null || durationMs === undefined ? '' : `${durationMs} ms`,
+            }),
+            h(Metric, {
+              label: t('label.stateMachine'),
+              value: t('label.stateSynced'),
+              note: verdict ? statusWord : '',
+            }),
+          ),
+        ),
+        // ---- the AI strip: an opinion, clearly fenced off from the verdict ----
+        h(
+          'div',
+          { className: 'e2e-ai' },
+          h('span', { className: 'e2e-ai-icon', 'aria-hidden': 'true' }, '◎'),
+          h('span', { className: 'e2e-ai-title' }, t('label.aiAttribution')),
+          h('span', { className: 'e2e-ai-disclaimer' }, t('label.aiDisclaimer')),
         ),
         // ---- which question are we reading the answer to ----
         h(
@@ -2357,6 +2440,12 @@ window.__ModuleLoader__.load({
         const timer = setTimeout(() => setConfirmDelete(false), 4000)
         return () => clearTimeout(timer)
       }, [confirmDelete])
+      // The checkboxes in the case matrix. Keys are case files, so a refresh that
+      // brings new cases simply leaves the unknown ones unchecked — selection is
+      // a statement about files the reader saw, not about the project.
+      const [checked, setChecked] = React.useState({})
+      const toggleChecked = (file) => setChecked((state) => ({ ...state, [file]: !state[file] }))
+      const clearChecked = () => setChecked({})
 
       const refresh = React.useCallback(async () => {
         setBoot((current) => ({ ...current, status: current.data ? current.status : 'loading' }))
@@ -2805,76 +2894,150 @@ window.__ModuleLoader__.load({
       // object captured at click time means a case created or deleted a moment ago
       // stays invisible until the user navigates away and back.
       const project = openProject ? projects.find((item) => item.key === openProject.key) || openProject : null
+      // The checkbox selection, expressed as files. A file that disappeared in a
+      // refresh is simply not in this list any more — running it would be running
+      // something the reader cannot see. It lives up here because the top
+      // navigation's "run selected" button needs it too.
+      const projectCases = project ? project.cases || [] : []
+      const selectedFiles = projectCases.filter((entry) => checked[entry.file]).map((entry) => entry.file)
 
+      // ---- top navigation, after the Stitch design -----------------------
+      // Two rows: a bar with the product name, the live chips and the two run
+      // actions, then a tab strip whose active tab follows the view. The tabs
+      // are navigational lies in two places (detail and plan are per-case pages
+      // reached by opening a case), and the design says to show them anyway —
+      // a disabled tab tells the reader the page exists and what it costs.
+      const firstTarget = (registry.targets && registry.targets[0]) || null
+      const originLabel = project
+        ? project.baseUrl || (firstTarget && firstTarget.baseUrl) || ''
+        : (firstTarget && firstTarget.baseUrl) || ''
+      const targetName = firstTarget ? firstTarget.name : ''
+      const navTabs = [
+        { key: 'cases', label: t('nav.tab.cases'), on: view === 'cases' && !!project },
+        { key: 'detail', label: t('nav.tab.detail'), on: view === 'detail' },
+        { key: 'plan', label: t('nav.tab.plan'), on: view === 'plan' },
+      ]
+      const caseCount = project ? (project.cases || []).length : projects.reduce((sum, item) => sum + (item.counts ? item.counts.total : 0), 0)
       const header = h(
         'header',
-        { className: 'e2e-header' },
+        { className: 'e2e-topnav' },
         h(
           'div',
-          { className: 'e2e-header-text' },
+          { className: 'e2e-topnav-bar' },
+          h('span', { className: 'e2e-topnav-logo', 'aria-hidden': 'true' }, '◆'),
+          h('strong', { className: 'e2e-topnav-name' }, 'dsh-e2e'),
+          h('span', { className: 'e2e-topnav-title' }, t('panel.title')),
+          originLabel ? h('span', { className: 'e2e-topnav-chip', title: originLabel }, t('label.origin'), ': ', originLabel) : null,
+          targetName ? h('span', { className: 'e2e-topnav-chip' }, t('label.env'), ': ', targetName) : null,
+          h('div', { className: 'e2e-spacer' }),
+          h(Btn, { small: true, onClick: refresh }, t('action.refresh')),
           project
-            ? h(
-                'div',
-                { className: 'e2e-crumbs' },
+            ? [
                 h(
-                  'button',
-                  { type: 'button', className: 'e2e-crumb', onClick: () => setOpenProject(null) },
-                  t('action.backToProjects'),
+                  Btn,
+                  {
+                    key: 'selected',
+                    small: true,
+                    disabled: busy === 'run-all' || selectedFiles.length === 0,
+                    title: selectedFiles.length === 0 ? t('label.selectCase') : '',
+                    onClick: () => runAll(selectedFiles),
+                  },
+                  t('action.runSelected'),
                 ),
-                h('span', { className: 'e2e-crumb-sep' }, '/'),
-                // The project stays a link whenever a case or the plan editor is
-                // open, so "go back to the list" is one click rather than a hunt
-                // for a button.
-                view !== 'cases'
-                  ? h(
-                      'button',
-                      { type: 'button', className: 'e2e-crumb', onClick: () => setView('cases') },
-                      project.name,
-                    )
-                  : h('span', { className: 'e2e-crumb-current' }, project.name),
-                view === 'plan'
-                  ? h(
-                      'span',
-                      null,
-                      h('span', { className: 'e2e-crumb-sep' }, '/'),
-                      h('span', { className: 'e2e-crumb-current' }, t('action.editTestPlan')),
-                    )
-                  : null,
-                view === 'detail'
-                  ? h(
-                      'span',
-                      null,
-                      h('span', { className: 'e2e-crumb-sep' }, '/'),
-                      h(
-                        'span',
-                        { className: 'e2e-crumb-current' },
-                        (selected && selected.definition && selected.definition.caseId) || (selected && selected.file) || '',
-                      ),
-                    )
-                  : null,
-              )
-            : h('h2', { className: 'e2e-title' }, t('label.projects')),
-          h('p', { className: 'e2e-subtitle' }, project ? project.projectPath || project.baseUrl || '' : t('panel.subtitle')),
+                h(
+                  Btn,
+                  {
+                    key: 'regression',
+                    small: true,
+                    primary: true,
+                    disabled: busy === 'run-all' || caseCount === 0,
+                    onClick: () => runAll(projectCases.map((entry) => entry.file)),
+                  },
+                  t('action.runFullRegression'),
+                ),
+              ]
+            : null,
         ),
-        h('div', { className: 'e2e-spacer' }),
-        h(Btn, { small: true, onClick: refresh }, t('action.refresh')),
+        h(
+          'nav',
+          { className: 'e2e-topnav-tabs' },
+          navTabs.map((tab) =>
+            tab.on
+              ? h('button', { key: tab.key, type: 'button', className: 'e2e-topnav-tab is-active' }, tab.label)
+              : h(
+                  'button',
+                  {
+                    key: tab.key,
+                    type: 'button',
+                    className: 'e2e-topnav-tab',
+                    onClick: () => {
+                      if (tab.key === 'cases') {
+                        if (project) setView('cases')
+                        else setOpenProject(null)
+                      }
+                    },
+                  },
+                  tab.label,
+                ),
+          ),
+          h('div', { className: 'e2e-spacer' }),
+          h('span', { className: 'e2e-topnav-suite' }, t('label.suite'), ': ', project ? project.name : t('label.suiteAll')),
+        ),
         project
           ? h(
-              Btn,
-              {
-                small: true,
-                onClick: () => {
-                  // One entry point for "make a case", whichever button was pressed:
-                  // the toolbar adds to no particular group, a group's own button
-                  // adds to that group.
-                  setPendingGroup('')
-                  setCreating('')
-                  setAdding((current) => !current)
+              'div',
+              { className: 'e2e-crumbs' },
+              h(
+                'button',
+                { type: 'button', className: 'e2e-crumb', onClick: () => setOpenProject(null) },
+                t('action.backToProjects'),
+              ),
+              h('span', { className: 'e2e-crumb-sep' }, '/'),
+              view !== 'cases'
+                ? h(
+                    'button',
+                    { type: 'button', className: 'e2e-crumb', onClick: () => setView('cases') },
+                    project.name,
+                  )
+                : h('span', { className: 'e2e-crumb-current' }, project.name),
+              view === 'plan'
+                ? h(
+                    'span',
+                    null,
+                    h('span', { className: 'e2e-crumb-sep' }, '/'),
+                    h('span', { className: 'e2e-crumb-current' }, t('action.editTestPlan')),
+                  )
+                : null,
+              view === 'detail'
+                ? h(
+                    'span',
+                    null,
+                    h('span', { className: 'e2e-crumb-sep' }, '/'),
+                    h(
+                      'span',
+                      { className: 'e2e-crumb-current' },
+                      (selected && selected.definition && selected.definition.caseId) || (selected && selected.file) || '',
+                    ),
+                  )
+                : null,
+              h('div', { className: 'e2e-spacer' }),
+              h(
+                Btn,
+                {
+                  small: true,
+                  onClick: () => {
+                    // One entry point for "make a case", whichever button was pressed:
+                    // the toolbar adds to no particular group, a group's own button
+                    // adds to that group.
+                    setPendingGroup('')
+                    setCreating('')
+                    setAdding((current) => !current)
+                  },
                 },
-              },
-              t('action.new'),
+                t('action.new'),
+              ),
             )
-          : null,
+          : h('p', { className: 'e2e-subtitle' }, t('panel.subtitle')),
       )
 
       if (boot.status === 'loading') {
@@ -2900,7 +3063,6 @@ window.__ModuleLoader__.load({
       // already put the cases on the project, so the page filters nothing: a
       // second membership rule here is how the list and the table would start to
       // disagree about what belongs to a project.
-      const projectCases = project ? project.cases || [] : []
       const failures = project ? project.warnings || [] : []
 
       const registryPanel = h(
@@ -3041,6 +3203,9 @@ window.__ModuleLoader__.load({
           onAddTests: () => setAdding((current) => !current),
           onRunAll: () => runAll(projectCases.map((entry) => entry.file)),
           running: busy === 'run-all' || Boolean(batch && batch.status === 'running'),
+          checked,
+          onToggleChecked: toggleChecked,
+          onRunSelected: (files) => runAll(files && files.length ? files : selectedFiles),
         }),
         // "Add more tests" opens the two ways a case arrives without being typed:
         // described to the model, or read out of the source. Both are drafts that
@@ -3339,7 +3504,58 @@ window.__ModuleLoader__.load({
 }
 .e2e-header { display: flex; align-items: flex-start; gap: 10px; }
 .e2e-header-text { min-width: 0; }
-.e2e-crumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+/* ---- top navigation, after the Stitch design ---------------------------- */
+/* Two rows. The first is identity + live chips + run actions; the second is
+   the tab strip. 1px borders instead of shadows, per the design system. */
+.e2e-topnav { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); overflow: hidden; /* The header keeps its height: a long page below must squeeze the page's own scroll area, not the navigation the reader needs to leave it. */ flex: 0 0 auto; }
+.e2e-topnav-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+.e2e-topnav-logo { color: var(--dsw-alias-brand-primary); font-size: 15px; }
+.e2e-topnav-name { font-size: 13px; font-weight: 600; letter-spacing: 0.01em; }
+.e2e-topnav-title { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.e2e-topnav-chip {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--dsw-alias-state-success-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-success-primary) 30%, transparent);
+  border-radius: 5px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.e2e-topnav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+}
+.e2e-topnav-tab {
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 8px 12px 7px;
+  cursor: pointer;
+}
+.e2e-topnav-tab:hover { color: var(--dsw-alias-label-primary); }
+.e2e-topnav-tab.is-active {
+  color: var(--dsw-alias-brand-primary);
+  border-bottom-color: var(--dsw-alias-brand-primary);
+  font-weight: 600;
+}
+.e2e-topnav-suite {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-tertiary);
+  text-transform: uppercase;
+}
+.e2e-crumbs { display: flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 6px 12px 8px; flex: 0 0 auto; }
 .e2e-crumb {
   appearance: none;
   border: 0;
@@ -3366,72 +3582,76 @@ window.__ModuleLoader__.load({
   padding: 6px 10px;
 }
 
-/* The project table: a grid, so every column lines up across rows without a
-   <table> fighting the panel's flex layout. */
-.e2e-table { display: flex; flex-direction: column; }
-.e2e-table-head,
-.e2e-table-row {
+/* The project cards: the landing surface after the Stitch design — headline
+   pass rate, a segmented track, and a legend. The card is a button because
+   opening a project is its whole job. */
+.e2e-project-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 2.2fr) minmax(150px, 1.5fr) 110px 170px 110px 70px;
-  align-items: center;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 12px;
-  padding: 11px 10px;
-  text-align: left;
 }
-.e2e-table-head {
-  font-size: 11.5px;
-  letter-spacing: 0.02em;
-  color: var(--dsw-alias-label-secondary);
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-  padding-bottom: 8px;
-}
-.e2e-table-row {
+.e2e-project-card {
   appearance: none;
-  border: 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-  background: transparent;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
   color: inherit;
   font: inherit;
   cursor: pointer;
-  border-radius: 8px;
-  transition: background 110ms ease;
+  transition: border-color 110ms ease, background 110ms ease;
 }
-.e2e-table-row:hover { background: var(--dsw-alias-bg-layer-1); }
-.e2e-col-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.e2e-project-icon { color: var(--dsw-alias-label-secondary); font-size: 14px; }
-.e2e-project-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.e2e-project-targets { font-size: 11px; }
-.e2e-result-counts { display: flex; gap: 6px; flex-wrap: wrap; }
-.e2e-col-activity, .e2e-col-created { font-size: 12px; color: var(--dsw-alias-label-secondary); }
-.e2e-type-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--dsw-alias-label-secondary);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 999px;
-  padding: 2px 9px;
-}
-.e2e-type-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--dsw-alias-label-secondary);
-  opacity: 0.65;
-}
-.e2e-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  font-size: 10.5px;
-  font-weight: 600;
+.e2e-project-card:hover { border-color: var(--dsw-alias-border-l3); background: var(--dsw-alias-bg-layer-2); }
+.e2e-project-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.e2e-project-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.e2e-project-title strong { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.e2e-project-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-state-success-primary); flex: 0 0 auto; }
+.e2e-project-dot.is-pulse { animation: e2e-pulse 1.6s ease-in-out infinite; background: var(--dsw-alias-state-warn-primary); }
+@keyframes e2e-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.e2e-project-badge {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--dsw-alias-brand-primary);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
 }
+.e2e-project-rate { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.e2e-project-rate-label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary); }
+.e2e-project-rate-value { font-size: 17px; font-weight: 700; color: var(--dsw-alias-brand-primary); font-variant-numeric: tabular-nums; }
+.e2e-project-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+  overflow: hidden;
+}
+.e2e-project-stack span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.e2e-project-stack-target { color: var(--dsw-alias-state-success-primary); }
+.e2e-project-track { display: flex; height: 7px; border-radius: 999px; overflow: hidden; background: var(--dsw-alias-bg-base); }
+.e2e-project-track-empty { background: var(--dsw-alias-bg-layer-2); }
+.e2e-project-seg { min-width: 0; }
+.e2e-project-seg.is-pass { background: var(--dsw-alias-state-success-primary); }
+.e2e-project-seg.is-fail { background: var(--dsw-alias-state-error-primary); }
+.e2e-project-seg.is-blocked { background: var(--dsw-alias-state-warn-primary); }
+.e2e-project-seg.is-planned { background: var(--dsw-alias-label-tertiary); }
+.e2e-project-legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.e2e-project-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.e2e-project-legend-item::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+.e2e-project-legend-item.is-pass::before { background: var(--dsw-alias-state-success-primary); }
+.e2e-project-legend-item.is-fail::before { background: var(--dsw-alias-state-error-primary); }
+.e2e-project-legend-item.is-blocked::before { background: var(--dsw-alias-state-warn-primary); }
+.e2e-project-legend-item.is-planned::before { background: var(--dsw-alias-label-tertiary); }
+.e2e-project-when { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
 
 /* The case list: search + tabs + grouped rows. */
 .e2e-cases { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; }
@@ -3478,31 +3698,90 @@ window.__ModuleLoader__.load({
 .e2e-cases-head,
 .e2e-case-row {
   display: grid;
-  grid-template-columns: 110px 130px minmax(180px, 1fr) 130px;
+  grid-template-columns: 26px 110px minmax(200px, 1.6fr) 110px minmax(160px, 1.2fr) 74px;
   align-items: center;
-  gap: 12px;
-  padding: 9px 10px;
+  gap: 10px;
+  padding: 7px 10px;
   text-align: left;
 }
 .e2e-cases-head {
-  font-size: 11.5px;
-  letter-spacing: 0.02em;
-  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-tertiary);
   border-bottom: 1px solid var(--dsw-alias-border-l1);
-  padding-bottom: 7px;
+  padding-bottom: 6px;
 }
-.e2e-case-row {
+/* The row itself is a div (it contains a checkbox and buttons); the whole
+   open area is one button so "read this case" stays one click. */
+.e2e-case-row { border-bottom: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; }
+.e2e-case-row:hover { background: var(--dsw-alias-bg-layer-1); }
+.e2e-case-open {
+  display: grid;
+  grid-template-columns: 110px minmax(200px, 1.6fr) 110px minmax(160px, 1.2fr);
+  align-items: center;
+  gap: 10px;
   appearance: none;
   border: 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-  background: transparent;
+  background: none;
   color: inherit;
   font: inherit;
+  text-align: left;
   cursor: pointer;
-  border-radius: 7px;
-  transition: background 110ms ease;
+  padding: 0;
+  min-width: 0;
 }
-.e2e-case-row:hover { background: var(--dsw-alias-bg-layer-1); }
+.e2e-case-check { width: 14px; height: 14px; cursor: pointer; accent-color: var(--dsw-alias-brand-primary); }
+.e2e-case-id { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; font-weight: 600; }
+.e2e-case-id.is-failed { color: var(--dsw-alias-state-error-primary); }
+.e2e-case-id.is-planned { color: var(--dsw-alias-label-tertiary); font-weight: 500; }
+.e2e-col-diagnostic {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.e2e-col-diagnostic.is-pass { color: var(--dsw-alias-label-secondary); }
+.e2e-col-diagnostic.is-warn { color: var(--dsw-alias-state-warn-primary); }
+.e2e-col-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.e2e-icon-btn {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.e2e-icon-btn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.e2e-group-balance { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11px; }
+.e2e-group-balance-pass { color: var(--dsw-alias-state-success-primary); }
+.e2e-group-balance-fail { color: var(--dsw-alias-state-error-primary); }
+.e2e-group-balance-error { color: var(--dsw-alias-state-warn-primary); }
+.e2e-group-fold { cursor: pointer; }
+/* The sticky serial-run bar: the one place "what will run" and "run it" meet. */
+.e2e-serial-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  z-index: 5;
+}
+.e2e-serial-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-state-success-primary); animation: e2e-pulse 1.6s ease-in-out infinite; }
+.e2e-serial-ready { font-weight: 600; font-size: 12.5px; }
+.e2e-serial-count { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
 .e2e-col-id { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
 .e2e-col-status, .e2e-col-priority { display: flex; align-items: center; gap: 6px; }
 .e2e-test-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -3534,15 +3813,6 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
   line-height: 1;
 }
 .e2e-plan-group-name { font-weight: 600; color: var(--dsw-alias-label-primary); }
-.e2e-bar {
-  display: flex;
-  height: 4px;
-  width: 90px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--dsw-alias-bg-layer-2);
-}
-.e2e-bar-seg { display: block; height: 100%; }
 
 /* The plan editor: grouped cards on the left, one document on the right. */
 .e2e-plan { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; }
@@ -3619,6 +3889,43 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
   background: var(--dsw-alias-bg-layer-1);
 }
 .e2e-hero-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.e2e-hero-id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.e2e-hero-deterministic {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-state-success-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.e2e-hero-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.e2e-hero-count { color: var(--dsw-alias-label-primary); font-weight: 700; }
+.e2e-hero-count.is-pass { color: var(--dsw-alias-state-success-primary); }
+.e2e-hero-meta-item.is-fail { color: var(--dsw-alias-state-error-primary); }
+.e2e-hero-meta-item.is-pass { color: var(--dsw-alias-state-success-primary); }
+/* The AI strip: an opinion, fenced off so it can never be mistaken for the verdict. */
+.e2e-ai {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-left: 2px solid var(--dsw-alias-brand-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.e2e-ai-icon { color: var(--dsw-alias-brand-primary); }
+.e2e-ai-title { color: var(--dsw-alias-brand-primary); font-weight: 600; }
+.e2e-ai-disclaimer { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+/* The action bar above the verdict: run / edit / export / history. */
+.e2e-detail-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.e2e-detail-crumbs { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dsw-alias-label-secondary); min-width: 0; }
+.e2e-detail-crumb.is-ref { color: var(--dsw-alias-brand-primary); font-weight: 600; font-family: var(--dsw-font-mono, ui-monospace, monospace); }
+.e2e-detail-env { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 10.5px; color: var(--dsw-alias-label-tertiary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 1px 6px; }
 .e2e-verdict-badge {
   font-family: var(--dsw-font-mono, ui-monospace, monospace);
   font-size: 11px;
