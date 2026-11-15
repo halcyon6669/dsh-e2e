@@ -134,6 +134,12 @@ export function renderMarkdown(report) {
       `file: \`${evidence.logs.path}\` — ${evidence.logs.totalLines} lines total, ${evidence.logs.scopedLines} matching trace id \`${evidence.logs.traceId}\`` +
         (evidence.logs.traceIdPresent ? '' : ' (no line carried it: every line of this run was scanned instead)'),
     )
+    // Kept-but-not-checked is a different claim from checked-and-clean, and the
+    // Markdown is what gets pasted into a bug report.
+    if (evidence.logs.asserted === false) {
+      lines.push('')
+      lines.push('_kept for evidence, not asserted on: this case does not check the console_')
+    }
     lines.push('')
     if (evidence.logs.lines.length === 0) {
       lines.push('_no log lines were collected_')

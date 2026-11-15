@@ -636,6 +636,41 @@ test('markdown shows what the database looked like before and after', () => {
   assert.match(text, /e2e1/)
 })
 
+test('markdown says when the console was kept but not asserted on', () => {
+  const report = sampleReport({ verdict: 'passed', failedChecks: [], checks: [], warnings: [] })
+  report.evidence.logs = {
+    path: '/tmp/run.log',
+    traceId: 'abc',
+    traceIdPresent: true,
+    asserted: false,
+    totalLines: 42,
+    scopedLines: 3,
+    lines: ['INFO started'],
+  }
+  const text = renderMarkdown(report)
+  assert.match(text, /## Logs/)
+  // "Here is the console" and "the run checked the console" are different
+  // claims. The report is what gets pasted into a bug report, so it has to make
+  // the weaker one when that is the one that is true.
+  assert.match(text, /kept for evidence, not asserted on/)
+  assert.match(text, /INFO started/)
+})
+
+test('a report whose console was asserted on does not apologize for it', () => {
+  const report = sampleReport({ verdict: 'passed', failedChecks: [], checks: [], warnings: [] })
+  report.evidence.logs = {
+    path: '/tmp/run.log',
+    traceId: 'abc',
+    traceIdPresent: true,
+    asserted: true,
+    totalLines: 42,
+    scopedLines: 3,
+    lines: ['INFO started'],
+  }
+  const text = renderMarkdown(report)
+  assert.doesNotMatch(text, /not asserted on/)
+})
+
 test('a snapshot that never got an "after" is left out rather than shown empty', () => {
   const report = sampleReport({ verdict: 'failed', failedChecks: [], checks: [], warnings: [] })
   report.evidence.snapshots = [{ index: 0, database: 'iam', sql: 'SELECT 1', before: [], beforeCount: 0 }]

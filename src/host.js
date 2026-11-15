@@ -11,7 +11,7 @@
  * is configured" teaches nobody what a case looks like.
  */
 import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createTools } from './tools.js'
@@ -117,12 +117,27 @@ export async function createHost({ dir, config = {}, ctx }) {
    * which is indistinguishable from "the loader row is not resolvable". Repeating
    * its two steps here turns that silence into an answer.
    *
-   * Computed once: none of these facts change while the Host runs, and a support
-   * answer should not cost a filesystem walk per request.
+   * Computed once: the loader rows and their resolution do not change while the
+   * Host runs, and a support answer should not cost a filesystem walk per
+   * request. The bundle size is the exception — HMR rewrites client.js without
+   * restarting the Host — so it is read live on every call.
    */
   let diagnosticsCache = null
+  function bundleSize() {
+    try {
+      return statSync(join(HERE, '..', 'client.js')).size
+    } catch {
+      return null
+    }
+  }
+
   function clientDiagnostics() {
-    if (diagnosticsCache) return diagnosticsCache
+    if (diagnosticsCache) {
+      if (diagnosticsCache.resolve && diagnosticsCache.resolve.manifestPath) {
+        return { ...diagnosticsCache, resolve: { ...diagnosticsCache.resolve, clientFile: bundleSize() } }
+      }
+      return diagnosticsCache
+    }
     const out = { entries: [], resolve: null }
     try {
       const loader = ctx.get('loader')
@@ -160,7 +175,11 @@ export async function createHost({ dir, config = {}, ctx }) {
         name: pkg.name,
         client: pkg.dsh ? pkg.dsh.client || null : null,
         clientExport: pkg.exports && pkg.exports['./client'] ? pkg.exports['./client'] : null,
-        clientFile: readFileSync(join(HERE, '..', 'client.js'), 'utf8').length,
+        // Bytes, not characters: this field says how big the bundle on disk is,
+        // and a UTF-8 file with Chinese strings in it is larger than its length
+        // in code points. Reporting characters made the number disagree with
+        // `Get-Item client.js` for no reason a reader could see.
+        clientFile: bundleSize(),
       }
     } catch (error) {
       out.resolve = { error: String((error && error.message) || error) }

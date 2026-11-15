@@ -283,6 +283,31 @@ const PAST_REPORT = {
     evidence: {
       request: { method: 'POST', url: 'http://localhost:8080/auth/register', body: { username: 'e2e1' } },
       response: { status: 200, statusText: 'OK', durationMs: 41, body: { token: 'abc' } },
+      // Kept-but-not-asserted: this run started a service, so its console is
+      // evidence even though the case checks nothing in it. `asserted: false`
+      // is what the panel has to say out loud.
+      logs: {
+        path: 'C:\\run.log',
+        traceId: 'abc123',
+        traceIdPresent: true,
+        asserted: false,
+        totalLines: 42,
+        scopedLines: 3,
+        lines: ['INFO started', 'WARN slow query'],
+      },
+      // A report written before before/after snapshots existed: the rows the
+      // query returned are still there, the pair is not. Showing nothing
+      // because one half is missing throws away the answer to keep the shape
+      // of the question.
+      database: [
+        {
+          database: 'default',
+          sql: 'SELECT valid_state FROM users',
+          rows: [{ valid_state: '1' }],
+          rowCount: 1,
+          error: null,
+        },
+      ],
       // A case with a browser block also took pictures. The panel has to offer
       // the tab for it, and the tab has to point at `/shot` rather than inline
       // the bytes: a base64 PNG in the report makes every report bigger.
@@ -684,6 +709,46 @@ await test('a browser run shows its pictures, and they come from /shot', async (
   assert.match(src, /\/shot\?path=/, 'the image is fetched from the shot route')
   assert.match(src, /shot-01-after-click\.png/, 'and points at the file this run wrote')
   assert.match(textOf(withShots), /greeted ada/, 'the page console is captured too')
+})
+
+await test('the console tab shows the server output and says it was not asserted on', async () => {
+  const opened = await settle(() => mainComponent({}))
+  const logsTab = elementsOf(opened).find(
+    (node) =>
+      node.props &&
+      String(node.props.className || '').split(' ').includes('e2e-mode-btn') &&
+      /Console/.test(textOf(node)),
+  )
+  assert.ok(logsTab, 'the detail page offers the console tab')
+  assert.match(textOf(logsTab), /Console 2/, 'and counts the lines it has')
+  logsTab.props.onClick()
+  const withLogs = await settle(() => mainComponent({}))
+  const text = textOf(withLogs)
+  assert.match(text, /WARN slow query/, 'the lines the server actually printed')
+  // The difference between "the run checked the console" and "the console is
+  // here" is the whole point: a reader who misses it thinks a green run
+  // verified that nothing alarming was logged.
+  assert.match(text, /Kept for evidence, not asserted on/, 'it says what the log is worth')
+  assert.doesNotMatch(text, /collected no logs/, 'and does not claim there are none')
+})
+
+await test('a report without snapshots still shows the rows it read', async () => {
+  const opened = await settle(() => mainComponent({}))
+  const dbTab = elementsOf(opened).find(
+    (node) =>
+      node.props &&
+      String(node.props.className || '').split(' ').includes('e2e-mode-btn') &&
+      /Database/.test(textOf(node)),
+  )
+  assert.ok(dbTab, 'the detail page offers the database tab')
+  assert.match(textOf(dbTab), /Database 1/, 'the after-state alone still counts as one answer')
+  dbTab.props.onClick()
+  const withDb = await settle(() => mainComponent({}))
+  const text = textOf(withDb)
+  assert.match(text, /SELECT valid_state FROM users/, 'the query that ran')
+  assert.match(text, /valid_state/, 'and the row it returned')
+  assert.match(text, /After the request only/, 'labelled as half a comparison, not a whole one')
+  assert.doesNotMatch(text, /read no database rows/, 'it does not claim there were none')
 })
 
 await test('pressing Edit is what opens the editor', async () => {

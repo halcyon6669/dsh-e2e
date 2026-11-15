@@ -1,6 +1,6 @@
 {
   "name": "dsh-e2e",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "DSH plugin: run a real end-to-end case against a real service - start it through its IDE run configuration, send the real request, collect the log lines for its trace id, read the database terminal state, and hand back a report with the evidence.",
   "keywords": [
     "dsh",

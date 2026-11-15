@@ -284,17 +284,30 @@ export async function runCase(definition, options = {}) {
 
     // 6. Logs, scoped to this run's trace id so concurrent traffic cannot mask a
     //    missing line. Give the async pipeline a moment to flush first.
-    if (definition.expect.logs && service) {
-      await new Promise((resolve) => setTimeout(resolve, options.logSettleMs ?? 800))
+    //
+    //    Collected whenever a service was started, not only when the case
+    //    asserts on logs. Assertions are conditional — evidence is not. A run
+    //    that started a server and then says nothing about what that server
+    //    printed leaves the reader with the one thing they always want and
+    //    never get back: the console at the moment it broke.
+    if (service) {
+      const asserted = Boolean(definition.expect.logs)
+      // Longer wait when something is about to be asserted on: a line that has
+      // not been flushed yet turns a real assertion into a flaky one.
+      await new Promise((resolve) => setTimeout(resolve, asserted ? (options.logSettleMs ?? 800) : (options.logFlushMs ?? 250)))
       await service.follower.poll()
-      const wanted = definition.expect.logs.traceId ? interpolateString(definition.expect.logs.traceId, variables) : traceId
+      const wanted = asserted && definition.expect.logs.traceId
+        ? interpolateString(definition.expect.logs.traceId, variables)
+        : traceId
       const scoped = service.follower.matching(wanted)
       const scopedOk = scoped.length > 0
       // A trace id is only usable if the service actually writes it. When nothing
       // carries it, the honest move is to widen to the lines written since the
       // request and say so loudly, rather than pass on a broader match silently.
-      const lines = (scopedOk ? scoped : service.follower.lines).slice(-definition.expect.logs.maxLines)
-      if (!scopedOk) {
+      const all = service.follower.lines
+      const limit = asserted ? definition.expect.logs.maxLines : 4000
+      const lines = (scopedOk ? scoped : all).slice(-limit)
+      if (asserted && !scopedOk) {
         warnings.push(
           `no log line carried the trace id ${wanted}: the service does not put the ${traceHeader} header into its logs, ` +
             `so log assertions fall back to every line of this run and may match unrelated traffic. ` +
@@ -305,12 +318,17 @@ export async function runCase(definition, options = {}) {
         path: service.fullOutputPath,
         traceId: wanted,
         traceIdPresent: scopedOk,
-        totalLines: service.follower.lines.length,
+        // `asserted` is not decoration: it is the difference between "these
+        // lines had to contain something and did" and "these lines are here
+        // because a console is worth keeping". A reader who confuses the two
+        // thinks a passing run verified its logs.
+        asserted,
+        totalLines: all.length,
         scopedLines: scoped.length,
         lines: lines.slice(-120),
       }
-      step('logs.collected', { totalLines: service.follower.lines.length, scopedLines: scoped.length, scanned: lines.length, traceIdPresent: scopedOk })
-      checks.push(...assertLogs(definition.expect.logs, lines, scopedOk ? wanted : null))
+      step('logs.collected', { totalLines: all.length, scopedLines: scoped.length, scanned: lines.length, traceIdPresent: scopedOk })
+      if (asserted) checks.push(...assertLogs(definition.expect.logs, lines, scopedOk ? wanted : null))
     }
 
     // 6b. Probe calls: follow-up requests that ask the service about its own

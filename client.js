@@ -184,10 +184,15 @@ window.__ModuleLoader__.load({
         'label.changed': 'Changed',
         'label.unchanged': 'No change',
         'label.noChecks': 'This run recorded no checkpoints.',
-        'label.noLogs': 'This run collected no logs. A case only collects them when it asserts on them.',
+        'label.noLogs':
+          'This run has no console to show. Runs recorded before the tool started keeping the server output do not have one, and a case that starts no service has no console at all.',
         'label.logsUnscoped':
           'No log line carried this run’s trace id, so these are every line since the request started — they may include unrelated traffic.',
+        'label.logsNotAsserted':
+          'Kept for evidence, not asserted on: this case does not check the console, so a green run says the service answered, not that it printed nothing alarming.',
         'label.noSnapshots': 'This run read no database rows.',
+        'label.afterOnly': 'After the request only',
+        'label.readAfterRequest': 'Read after the request',
         'label.snapshotGap':
           'No before/after pair: the query failed both times, or the case asserts on no database.',
         'label.formOnly': 'Setup SQL, captures, teardown and mocks stay in YAML: a form for them would be a text editor with extra steps.',
@@ -394,9 +399,13 @@ window.__ModuleLoader__.load({
         'label.changed': '有变化',
         'label.unchanged': '无变化',
         'label.noChecks': '这次运行没有记录检查点。',
-        'label.noLogs': '这次运行没有收集日志。只有用例对日志做断言时才会收集。',
+        'label.noLogs': '这次运行没有控制台可看。工具开始保留服务输出之前的旧报告没有，不启动服务的用例也没有。',
         'label.logsUnscoped': '没有日志行带这次运行的 trace id，所以这里是请求开始之后的全部日志，可能混入无关流量。',
+        'label.logsNotAsserted':
+          '这份日志只是证据，没有被断言：这条用例不检查控制台，所以绿只说明服务答复了，不说明它没有打印过难看的异常。',
         'label.noSnapshots': '这次运行没有读取数据库行。',
+        'label.afterOnly': '只有请求之后',
+        'label.readAfterRequest': '请求之后读到的',
         'label.snapshotGap': '没有前后对比：查询两次都失败了，或者这条用例没有数据库断言。',
         'label.lastRun': '最近运行',
         'label.neverRun': '从未运行',
@@ -1262,7 +1271,18 @@ window.__ModuleLoader__.load({
       const tabs = [
         { name: 'checks', label: t('label.mode.checks'), count: checks.length },
         { name: 'logs', label: t('label.mode.logs'), count: (evidence && evidence.logs && evidence.logs.lines && evidence.logs.lines.length) || 0 },
-        { name: 'database', label: t('label.mode.database'), count: (evidence && evidence.snapshots && evidence.snapshots.length) || 0 },
+        // Before/after pairs when the report has them, and the after-state on
+        // its own when it does not: a report written before snapshots existed
+        // still read the rows, and hiding them because the pair is missing
+        // throws away the answer to keep the shape of the question.
+        {
+          name: 'database',
+          label: t('label.mode.database'),
+          count:
+            (evidence && evidence.snapshots && evidence.snapshots.length) ||
+            (evidence && evidence.database && evidence.database.length) ||
+            0,
+        },
         // Only offered when the case has a browser block: a tab that is always
         // there and always empty is a question the page cannot answer.
         ...(evidence && evidence.browser
@@ -1400,6 +1420,12 @@ window.__ModuleLoader__.load({
                           { className: 'e2e-muted' },
                           `${evidence.logs.traceId} · ${evidence.logs.scopedLines}/${evidence.logs.totalLines}`,
                         ),
+                        // Kept, but not checked: saying so is the difference
+                        // between "the run verified its logs" and "here is what
+                        // the service printed".
+                        evidence.logs.asserted === false
+                          ? h('div', { className: 'e2e-muted' }, t('label.logsNotAsserted'))
+                          : null,
                         evidence.logs.traceIdPresent
                           ? null
                           : h('div', { className: 'e2e-warning' }, t('label.logsUnscoped')),
@@ -1416,7 +1442,11 @@ window.__ModuleLoader__.load({
                     ? evidence.snapshots.map((snapshot, index) =>
                         h(DatabaseDiff, { key: index, t, snapshot }),
                       )
-                    : h('div', { className: 'e2e-muted' }, t('label.noSnapshots')),
+                    : evidence && evidence.database && evidence.database.length > 0
+                      ? evidence.database.map((entry, index) =>
+                          h(DatabaseRows, { key: index, t, entry }),
+                        )
+                      : h('div', { className: 'e2e-muted' }, t('label.noSnapshots')),
                 )
               : null,
             tab === 'code' ? h('pre', { className: 'e2e-pre is-plan' }, (selected && selected.yaml) || '') : null,
@@ -1582,6 +1612,42 @@ window.__ModuleLoader__.load({
                 h('pre', { className: 'e2e-pre' }, rows(snapshot.after)),
               ),
             ),
+      )
+    }
+
+    /**
+     * A database assertion from a report that has no before/after pair.
+     *
+     * Reports written before snapshots existed carry the rows the query
+     * returned after the request and nothing else. That is still the answer to
+     * "what was in the table", which is why this is not `DatabaseDiff` with
+     * blanks: pretending a pair exists when one half was never read would be a
+     * quieter lie than showing the single half that was.
+     */
+    function DatabaseRows(props) {
+      const { t, entry } = props
+      const rows = (value) => {
+        if (!Array.isArray(value) || value.length === 0) return '—'
+        return formatValue(value)
+      }
+      return h(
+        'div',
+        { className: 'e2e-db-diff' },
+        h(
+          'div',
+          { className: 'e2e-db-head' },
+          `${t('label.database')} ${entry.database || 'default'}`,
+          h('span', { className: 'e2e-muted' }, ` · ${entry.rowCount ?? (entry.rows || []).length} rows`),
+          h(Chip, { tone: 'idle' }, t('label.afterOnly')),
+        ),
+        h('pre', { className: 'e2e-pre' }, entry.sql),
+        entry.error ? h('div', { className: 'e2e-warning' }, String(entry.error)) : null,
+        h(
+          'div',
+          null,
+          h('div', { className: 'e2e-muted' }, t('label.readAfterRequest')),
+          h('pre', { className: 'e2e-pre' }, rows(entry.rows)),
+        ),
       )
     }
 

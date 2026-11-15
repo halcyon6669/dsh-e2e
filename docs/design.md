@@ -694,8 +694,8 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 | 页签 | 回答的问题 | 数据来源 |
 |---|---|---|
 | 检查点 | 它到底检查了什么，哪条不成立 | `report.checks` |
-| 控制台 | 服务在这一次请求里说了什么 | `evidence.logs` |
-| 数据库 | 请求前后各是什么样 | `evidence.snapshots` |
+| 控制台 | 服务在这一次请求里说了什么 | `evidence.logs`（`asserted` 说明它是否参与判定） |
+| 数据库 | 请求前后各是什么样 | `evidence.snapshots`；旧报告退回 `evidence.database` |
 | 截图 | 用户当时看到的画面是什么 | `evidence.browser.screenshots`，图片走 `GET /shot` |
 | 代码 | 这条用例是怎么写的 | 文件原文 |
 | 历史 | 它以前跑成什么样 | `GET /case` 一起下发的 `history` |
@@ -705,6 +705,10 @@ key = originKey(target.baseUrl) || projectKey(target.projectPath) || `target:${n
 **打开用例就加载最新报告**，而不是等读者点历史里的一条。否则一个跑过十二次的用例，详情页里几个页签全是空的——那是在说谎。
 
 **`evidence.logs` 没有一行带 trace id 时要说出来。** 服务端没配 MDC 时插件会退回「请求开始之后的全部日志」，那些行可能混入无关流量。静默展示它们比不展示更糟：读者会以为那是这一次的证据。
+
+**断言是有条件的，证据不是。** 第一版只在 `definition.expect.logs` 存在时才去收日志（"没人要的证据何必收"），结果所有没写这个块的用例，控制台页签永久空白——而且空白不区分「这次没打印」和「我们没去看」。现在服务一启动就收，无条件写进 `evidence.logs`；是否参与判定由 `expect.logs` 决定，报告用 `asserted` 字段记下这件事，页签和 Markdown 报告各标一行。等待时长也跟着分：要断言的日志没 flush 会把真断言变成 flaky（`logSettleMs`，默认 800ms），只为留证据时 250ms 就够（`logFlushMs`），不必让每次运行多等半秒。
+
+**缺一半配对时，显示读到的那一半。** 前后对比是后加的功能，早于它的报告没有 `evidence.snapshots`，但 `evidence.database` 里明明有两行终态。第一版数据库页签只认 `snapshots`，于是旧报告上那个页签是空的。现在退回 `DatabaseRows` 并标注「只有请求之后」——用一个假装配对存在、其中一半用空白填满的 `DatabaseDiff` 去渲染，是比只显示一半更安静的谎。
 
 ### 5.15 数据库前后对比：为什么断言要跑两次
 
@@ -1250,6 +1254,27 @@ fatal: ReferenceError: index is not defined
 
 这不是偷懒：一个用例的失败理由几乎总是「页面上没有出现该出现的东西」，而 console 是那条线索；网络瀑布是性能分析的工具，性能不是这个工具的判定对象。列进缺口而不是假装做过。
 
+### 11.17 空页签不区分「没有」和「没去看」
+
+用户报的第三类 bug 长这样：「页面有 bug，控制台和数据库都没有数据。」
+
+查下去的结论是：**页面没坏，数据本来就没有。** 但这恰好是最难自证清白的一类报告——一个空页签在三件事上都长得一样：
+
+| 读者的猜测 | 实际发生的事 |
+|---|---|
+| 后端没下发 | 下发了，是 `null` |
+| 前端没渲染 | 渲染了，走进了空态分支 |
+| 本来就没有 | 就是这一种 |
+
+两个独立的缺口叠在一起：
+
+1. **日志只在用例写 `expect.logs` 时才收。** 理由听起来无可指摘（没人要的证据何必收），代价是所有没写这个块的用例，控制台页签永久空白。三条真实用例一条都没写，于是三条全空。
+2. **数据库页签只认 `evidence.snapshots`。** 那是前后对比功能上线后才有的字段，而用户点开的最新报告恰好早于它——`evidence.database` 里躺着两行终态，页面上却什么都没有。
+
+修法不是「给空态加一句文案」，而是让**空态在三种情况下的措辞不同**：没有服务（`这次运行没有控制台可看`）、有日志但没断言（列出日志 + `这份日志只是证据，没有被断言`）、旧报告的数据库（显示读到的那一半 + `只有请求之后`）。页签上的计数也跟着改：数据库页签数的是「能显示几条」，不是「有几对」，否则旧报告会显示 `数据库 0` 而点开有内容。
+
+> 一个永远空着的页签，和一句永远显示的错误，是同一种东西：它省了写的人思考，花的是读的人的时间。
+
 ---
 
 ## 12. 真机验证记录
@@ -1580,6 +1605,38 @@ screenshots are only served from the report directory
 ```
 
 **踩到的坑**：第一次跑 `fatal: connect ECONNREFUSED 127.0.0.1:3337`——静态服务器是用 `Start-Job` 起的，随那个 shell 进程一起死了。每次 `pwsh` 调用都是独立进程，长跑的服务必须用后台作业起。
+
+### 12.13 空的控制台与数据库页签：根因是数据，不是渲染
+
+用户报的是「控制台和数据库都没有数据」。截图里 Code 页签正常渲染整份 YAML，历史页签列了 7 条通过的运行——所以读取链路是好的。
+
+遍历 `C:\Users\administor-\.dsh\e2e\reports` 里全部 17 份报告之后，两个事实浮出来：
+
+| 字段 | 实际情况 |
+|---|---|
+| `evidence.logs` | **17 份全是 `null`**，因为三条用例都没写 `expect.logs`（守卫是 `if (definition.expect.logs && service)`） |
+| `evidence.snapshots` | 只有 2 份有（前后对比上线之后写的），其余字段**根本不存在**；用户点开的最新 CC-001 报告属于旧格式 |
+
+也就是说页面落进了两条诚实的空态文案，但呈现得像坏了。修完之后旧报告的回退分支可以用**真实数据**验证：
+
+```
+GET /report?path=run-2026-11-14T17-12-06-547Z-65e2d7__CC-001.json&format=json
+→ database entries = 2, snapshots = 0, logs = null
+→ first db sql = SELECT valid_state FROM users WHERE username = 'e2e81f7de0b2583ddfb'
+→ first db rowCount = 1
+```
+
+这正是 `DatabaseRows` 要吃的东西：两行终态、没有配对、显示出来并标注「只有请求之后」。
+
+**日志的无条件收集没能真机验证**：那两次 `POST /run-all` 都 fatal 退出，`cannot reach the IDE MCP server at http://127.0.0.1:64342: connect ECONNREFUSED`——IntelliJ 没在运行，`Test-NetConnection` 也是 False，而服务日志只有在工具自己拉起服务时才存在。形状部分（`asserted` 字段、Markdown 那一行）由单测覆盖，端到端留给下次环境齐的时候。**这不是"大概没问题"，是"这条没人验证"。**
+
+顺带查出另一个假警报：`/status` 的 `clientDiagnostics.resolve.clientFile` 报 149065，而磁盘上 `client.js` 是 151773 字节。差值不是缓存过期，是 `readFileSync(..., 'utf8').length` 数的是**字符**——文件里有中文。字段名说「bundle 有多大」，那就该是字节：
+
+```js
+clientFile: statSync(join(HERE, '..', 'client.js')).size,
+```
+
+同时把 `clientDiagnostics` 的缓存拆开：loader 扫描确实一辈子不变，但**文件大小会被 HMR 改写**，所以那一个字段每次实时读。原来那句注释「Computed once: none of these facts change while the Host runs」对它是错的，而错得很隐蔽——诊断字段自己过期，报的是一个几周前的数字。
 
 ---
 
@@ -1953,3 +2010,10 @@ the case contains INSERT/UPDATE/DELETE statements but database writes are disabl
 本机没有 ffmpeg，所以浏览器层产出的是帧序列，文档里、面板里、`design.md` 里都不叫它视频（§11.15）。console 收到的是页面 `console.*`，不是网络瀑布，所以那一页就叫「控制台」，不叫「网络」（§11.16）。WireMock 只解析不执行，那就写在「已知缺口」第一条里，而不是标一个绿色的「已支持」。
 
 这条原则的代价是清单会变长，收益是清单上剩下的每一条都可以信。
+
+它有一个更日常的版本，来自用户报的「控制台和数据库都没有数据」（§11.17）：
+
+> **空态要能区分「没有」和「没去看」。**
+
+一个空页签、一句空列表，在三种情况下长得一模一样：后端没下发、前端没渲染、本来就没有。前两种是 bug，第三种是事实，而读者没有义务做这个推理。所以控制台页签在三种情况下的措辞不同、数据库页签数字的是「能显示几条」而不是「有几对」、`asserted` 字段明说这份日志有没有参与判定。同一件事也发生在诊断字段上：`clientFile` 数错了单位（字符而不是字节），报出来的数字和磁盘对不上，而它偏偏是排查「面板为什么不出现」时第一个被看的数字。
+
