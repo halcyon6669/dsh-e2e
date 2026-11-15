@@ -55,6 +55,83 @@ async function caseExists(path) {
 }
 
 /**
+ * The scanned endpoint a tick refers to.
+ *
+ * Two controllers can declare the same route — `GET /` twice in one project is
+ * not exotic — so path and method alone identify a *route*, not an endpoint.
+ * The client sends the controller and the source line it saw, and those decide
+ * when they are there; path and method are the fallback for a caller that did
+ * not send them.
+ */
+function matchScannedEndpoint(endpoints, pick, method, path) {
+  const sameRoute = endpoints.filter(
+    (item) => item.path === path && (method === '' || item.httpMethod === method),
+  )
+  if (sameRoute.length === 0) return null
+  const controller = pick.controller ? String(pick.controller) : ''
+  const javaMethod = pick.javaMethod ? String(pick.javaMethod) : ''
+  const file = pick.file ? String(pick.file) : ''
+  const line = pick.line === undefined || pick.line === null ? null : Number(pick.line)
+  const exact = sameRoute.find(
+    (item) =>
+      (controller === '' || item.controller === controller) &&
+      (javaMethod === '' || item.javaMethod === javaMethod) &&
+      (file === '' || item.file === file) &&
+      (line === null || Number(item.line) === line),
+  )
+  return exact || sameRoute[0]
+}
+
+/**
+ * Every name one endpoint could be written under, best first.
+ *
+ * `slugFor` turns `GET /` into `get-root`, which is stable and readable. When a
+ * second controller declares the same route the readable name belongs to the
+ * first, and the controller it came from is the honest way to tell them apart.
+ */
+function* idCandidates(base, endpoint) {
+  const root = String(base)
+  yield root
+  const suffix = String(endpoint.controller || endpoint.javaMethod || 'second')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'second'
+  yield `${root}-${suffix}`
+  for (let index = 2; index < 1000; index += 1) yield `${root}-${suffix}-${index}`
+}
+
+/**
+ * The name to write this endpoint's case under, and whether it is already there.
+ *
+ * A generated skeleton names its own source in the description, and that is the
+ * only thing on disk that separates `GET /` in one controller from `GET /` in
+ * another. Matching on it means a second import of the same endpoint reports
+ * "already there" — naming the file it found, not the readable name it would
+ * have used — while a *different* endpoint that happens to share a route gets a
+ * qualified name of its own instead of being mistaken for it.
+ */
+async function pickId(base, endpoint, dir) {
+  for (const candidate of idCandidates(base, endpoint)) {
+    const file = join(dir, `${candidate}.yaml`)
+    if (!(await caseExists(file))) return { id: candidate, existing: null }
+    let text = ''
+    try {
+      text = await readFile(file, 'utf8')
+    } catch {
+      // Unreadable is still somebody's file; take a different name.
+      continue
+    }
+    if (
+      text.includes(`${endpoint.file}:${endpoint.line}`) &&
+      text.includes(String(endpoint.controller || ''))
+    ) {
+      return { id: null, existing: candidate }
+    }
+  }
+  return { id: null, existing: base }
+}
+
+/**
  * The version the panel reports is the package's own version, read once at load
  * time. Hard-coding it in here means the number in `/bootstrap` drifts from
  * `package.json` the first time anyone bumps the version — and a version field
@@ -1126,6 +1203,10 @@ export function createPanel({ ctx, config = {}, state }) {
         422,
       )
     }
+    // Where the cases go: the configured case directory, which is also the only
+    // place the case list reads. A case is attributed to its project by
+    // `env.target`, not by which folder it sits in — writing into a per-project
+    // subfolder would put the file somewhere no listing ever looks.
     const dir = roots()[0] || defaultCaseDir({ state })
     await mkdir(dir, { recursive: true })
 
@@ -1144,9 +1225,7 @@ export function createPanel({ ctx, config = {}, state }) {
     for (const pick of picked) {
       const method = String(pick.method || '').toUpperCase()
       const path = String(pick.path || '').trim()
-      const endpoint = (scan.endpoints || []).find(
-        (item) => item.path === path && (method === '' || item.httpMethod === method),
-      )
+      const endpoint = matchScannedEndpoint(scan.endpoints || [], pick, method, path)
       if (!endpoint) {
         skipped.push({ endpoint: `${method || 'ANY'} ${path}`, reason: 'the scan does not find it any more' })
         continue
@@ -1159,7 +1238,20 @@ export function createPanel({ ctx, config = {}, state }) {
           schema: input.schema,
           id: pick.id,
         })
-        const file = join(dir, `${skeleton.document.id}.yaml`)
+        // The first free name belongs to this endpoint unless the file already on
+        // disk describes the same endpoint — then there is nothing to write, and
+        // saying so is the answer. Anything else in the way is somebody else's
+        // case with the same readable name, and it gets a qualified one.
+        const picked = pick.id
+          ? { id: String(pick.id), existing: null }
+          : await pickId(skeleton.document.id, endpoint, dir)
+        if (picked.id === null) {
+          skipped.push({ endpoint: label, reason: `${picked.existing}.yaml is already there` })
+          continue
+        }
+        const id = picked.id
+        skeleton.document.id = id
+        const file = join(dir, `${id}.yaml`)
         if (await caseExists(file)) {
           skipped.push({ endpoint: label, reason: `${basename(file)} is already there` })
           continue

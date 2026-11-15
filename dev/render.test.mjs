@@ -346,6 +346,11 @@ const PAST_REPORT = {
 /* ---------- the harness ---------- */
 
 const requested = []
+/** The parsed request body of every POST, paired with its path. */
+const posted = []
+// Two controllers declaring the same route is what a real project looks like, and
+// it is what a route-only identity gets wrong: the second one collapses onto the
+// first, or reports itself "already there".
 const SCAN = {
   ok: true,
   projectPath: 'E:/project/backend/Record',
@@ -355,13 +360,45 @@ const SCAN = {
   entities: [],
   warnings: [],
   endpoints: [
-    { httpMethod: 'POST', path: '/auth/register', javaMethod: 'register', requestBody: { type: 'RegisterDto', fields: [] } },
-    { httpMethod: 'GET', path: '/auth/me', javaMethod: 'me', requestBody: null },
+    {
+      controller: 'AuthController',
+      file: 'src/main/java/app/AuthController.java',
+      line: 51,
+      httpMethod: 'POST',
+      path: '/auth/register',
+      javaMethod: 'register',
+      requestBody: { type: 'RegisterDto', fields: [] },
+    },
+    {
+      controller: 'AuthController',
+      file: 'src/main/java/app/AuthController.java',
+      line: 88,
+      httpMethod: 'GET',
+      path: '/auth/me',
+      javaMethod: 'me',
+      requestBody: null,
+    },
+    {
+      controller: 'HealthController',
+      file: 'src/main/java/app/HealthController.java',
+      line: 14,
+      httpMethod: 'GET',
+      path: '/auth/me',
+      javaMethod: 'health',
+      requestBody: null,
+    },
   ],
 }
-globalThis.fetch = async (url) => {
+globalThis.fetch = async (url, options) => {
   const path = String(url).split('/api')[1] || ''
   requested.push(path)
+  if (options && typeof options.body === 'string') {
+    try {
+      posted.push({ path, body: JSON.parse(options.body) })
+    } catch {
+      /* a non-JSON body is not what this test is about */
+    }
+  }
   const body = path.startsWith('/projects')
     ? PROJECTS
     : path.startsWith('/case?')
@@ -1014,21 +1051,49 @@ await test('the toolbar scans the project, and the dialog imports what is ticked
   assert.equal(importButton().props.disabled, true, 'an empty tick list cannot import')
 
   const rows = elementsOf(dialogTree).filter((node) => node.props && String(node.props.className || '').includes('e2e-scan-row'))
-  assert.equal(rows.length, 2, 'one row per endpoint')
+  // Three endpoints, two of them the same route from two controllers. A route
+  // alone would collapse the second into the first, which is the bug this is
+  // here to catch.
+  assert.equal(rows.length, 3, 'one row per endpoint, even when two share a route')
   const boxes = rows.map((row) => elementsOf(row).find((node) => node.type === 'input'))
   boxes[0].props.onChange()
   dialogTree = await settle(() => mainComponent({}))
   assert.equal(importButton().props.disabled, false, 'a ticked row arms the import')
   assert.match(textOf(dialogTree), /Import 1/, 'the button counts the ticks')
 
+  // Ticking the same route in the other controller must be a second tick, not an
+  // untick of the first.
+  boxes[2].props.onChange()
+  dialogTree = await settle(() => mainComponent({}))
+  assert.match(textOf(dialogTree), /Import 2/, 'two rows on one route are two ticks')
+
   importButton().props.onClick()
   await settle(() => mainComponent({}))
   assert.ok(requested.includes('/import-endpoints'), 'the ticks became one import request')
+  const sent = posted.filter((entry) => entry.path.startsWith('/import-endpoints')).pop()
+  assert.equal(sent.body.endpoints.length, 2, 'both ticked endpoints travel')
+  assert.equal(sent.body.endpoints[0].file, 'src/main/java/app/AuthController.java', 'a pick names its own source file')
+  assert.equal(
+    sent.body.projectPath,
+    'E:/project/backend/Record',
+    'the import names the open project, not whichever target the Host would guess',
+  )
+  assert.equal(sent.body.target, 'record-local', 'the case is stamped with the open project\u2019s target')
   const closed = await settle(() => mainComponent({}))
   assert.equal(
     elementsOf(closed).filter((node) => node.props && node.props.className === 'e2e-scan-backdrop').length,
     0,
     'the dialog closes once the import lands',
+  )
+})
+
+await test('the scan asks the Host about the open project', async () => {
+  const scans = posted.filter((entry) => entry.path.startsWith('/scan'))
+  assert.ok(scans.length > 0, 'the toolbar scan reached the Host')
+  assert.equal(
+    scans.pop().body.projectPath,
+    'E:/project/backend/Record',
+    'the scan reads the checkout the reader opened',
   )
 })
 

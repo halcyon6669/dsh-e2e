@@ -1395,6 +1395,99 @@ await testAsync('importing with nothing ticked is refused, in the reader\'s word
   )
 })
 
+// Two controllers in one project can both answer `GET /`. A route-only identity
+// writes one file and calls the other one "already there" — which is exactly the
+// import that silently did nothing.
+const DUP_ROOT = join(tmpDir, 'dup-project')
+await mkdir(join(DUP_ROOT, 'src', 'main', 'resources'), { recursive: true })
+await mkdir(join(DUP_ROOT, 'src', 'main', 'java', 'a'), { recursive: true })
+await mkdir(join(DUP_ROOT, 'src', 'main', 'java', 'b'), { recursive: true })
+await writeFile(join(DUP_ROOT, 'src', 'main', 'resources', 'application.yml'), 'server:\n  port: 9556\n', 'utf8')
+await writeFile(
+  join(DUP_ROOT, 'src', 'main', 'java', 'a', 'AlphaController.java'),
+  [
+    'package a;',
+    '',
+    'import org.springframework.web.bind.annotation.*;',
+    '',
+    '@RestController',
+    'public class AlphaController {',
+    '    @GetMapping("/")',
+    '    public String index() { return "a"; }',
+    '}',
+    '',
+  ].join('\n'),
+  'utf8',
+)
+await writeFile(
+  join(DUP_ROOT, 'src', 'main', 'java', 'b', 'BetaController.java'),
+  [
+    'package b;',
+    '',
+    'import org.springframework.web.bind.annotation.*;',
+    '',
+    '@RestController',
+    'public class BetaController {',
+    '    @GetMapping("/")',
+    '    public String root() { return "b"; }',
+    '}',
+    '',
+  ].join('\n'),
+  'utf8',
+)
+const DUP_CASES = join(tmpDir, 'dup-cases')
+await mkdir(DUP_CASES, { recursive: true })
+await writeFile(
+  join(DUP_CASES, 'e2e.registry.yml'),
+  `targets:\n  dup:\n    baseUrl: http://127.0.0.1:9556\n    projectPath: ${DUP_ROOT.split('\\').join('/')}\n`,
+  'utf8',
+)
+const dupPanel = createPanel({
+  ctx: { get: () => undefined },
+  config: { caseDir: DUP_CASES },
+  state: { dataDir: join(tmpDir, 'dup-data') },
+})
+
+await testAsync('two controllers on one route are two cases, not one and a lie', async () => {
+  const result = await dupPanel.importEndpoints({
+    endpoints: [
+      { method: 'GET', path: '/', controller: 'AlphaController', file: 'src/main/java/a/AlphaController.java', line: 7 },
+      { method: 'GET', path: '/', controller: 'BetaController', file: 'src/main/java/b/BetaController.java', line: 7 },
+    ],
+  })
+  assert.equal(
+    result.written.length,
+    2,
+    `both endpoints deserve a file; skipped: ${JSON.stringify(result.skipped)}`,
+  )
+  assert.notEqual(result.written[0].file, result.written[1].file, 'one file each')
+  assert.ok(existsSync(result.written[0].path) && existsSync(result.written[1].path), 'both are on disk')
+})
+
+await testAsync('a tick naming its source file resolves to that controller, not the first match', async () => {
+  // The route is the same for both; only the file tells them apart. Importing the
+  // Beta one has to read Beta's source, not Alpha's.
+  const beta = await dupPanel.importEndpoints({
+    endpoints: [
+      { method: 'GET', path: '/', controller: 'BetaController', file: 'src/main/java/b/BetaController.java', line: 7 },
+    ],
+  })
+  assert.equal(beta.written.length, 0, 'the file is already there from the test above')
+  assert.match(String(beta.skipped[0].reason), /already there/)
+  // The reason names the file, so a reader can see which one it collided with.
+  assert.match(String(beta.skipped[0].reason), /beta/i)
+})
+
+await testAsync('the import writes where the case list reads: the configured case directory', async () => {
+  const result = await importPanel.importEndpoints({
+    endpoints: [{ method: 'POST', path: '/demo/ping' }],
+    projectPath: IMPORT_ROOT,
+    target: 'demo',
+  })
+  assert.equal(result.dir, IMPORT_CASES, 'one directory, the one the panel lists')
+  assert.ok(existsSync(join(IMPORT_CASES, 'post-demo-ping.yaml')), 'the file landed in it')
+})
+
 section('delete a directory project')
 
 // A project card with no registry target is a directory. Deleting it is a file

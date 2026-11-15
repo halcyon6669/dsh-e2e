@@ -654,9 +654,42 @@ window.__ModuleLoader__.load({
      * Absent when the panel is open in an ordinary browser tab (the bridge is
      * only exposed on the dsh-app:// document): there the field stays typeable.
      */
+    /**
+     * What identifies one scanned row.
+     *
+     * Not the route: two controllers in one project can both declare `GET /`,
+     * and a key that collapses them means ticking one ticks the other, React
+     * warns about duplicate keys, and the import cannot tell which endpoint the
+     * reader meant. The source coordinates are the endpoint's identity; the route
+     * is only what a person reads off the row.
+     */
+    function scanKey(endpoint) {
+      const where = endpoint.file ? `${endpoint.file}:${endpoint.line || 0}` : endpoint.controller || ''
+      return `${endpoint.httpMethod} ${endpoint.path} ${where}`
+    }
+
     function systemPicker() {
       const bridge = globalThis.__DSH_DIRECTORY_PICKER__
       return bridge && typeof bridge.pick === 'function' ? bridge : null
+    }
+
+    /**
+     * What a scan should look at, expressed as the project the toolbar belongs to.
+     *
+     * Both halves matter and both used to be guessed by the Host: the checkout to
+     * read endpoints out of, and the target a written case names. Guessing the
+     * first scans somebody else's source; guessing the second stamps every new
+     * case with the wrong `env.target`, so the cases land in another project's
+     * list. This is the same object shape for the first scan and every re-scan,
+     * which is why it is built from the project rather than from the dialog.
+     */
+    function scanScope(project) {
+      if (!project) return {}
+      const target = Array.isArray(project.targets) && project.targets.length > 0 ? project.targets[0] : ''
+      return {
+        ...(project.projectPath ? { projectPath: project.projectPath } : {}),
+        ...(target ? { target } : {}),
+      }
     }
 
     function verdictTone(verdict) {
@@ -2373,7 +2406,7 @@ window.__ModuleLoader__.load({
       const { t, scan, picked, importing, importError, onTogglePicked, onPickAll, onImport, onRescan, onClose } = props
 
       const list = (scan.data && scan.data.endpoints) || []
-      const keyOf = (endpoint) => `${endpoint.httpMethod} ${endpoint.path}`
+      const keyOf = scanKey
       const allPicked = list.length > 0 && picked.size === list.length
 
       return h(
@@ -2830,7 +2863,10 @@ window.__ModuleLoader__.load({
         setScanPicked(() => new Set())
         setScanImportError(null)
         try {
-          const data = await apiPost('/scan', {})
+          // The project that is open, not whatever target the Host would pick on
+          // its own: the dialog is opened from a project's toolbar, and a scan of
+          // a different checkout lists endpoints the reader never asked about.
+          const data = await apiPost('/scan', scanScope(project))
           setScanState({ status: 'ready', data, error: null })
         } catch (error) {
           setScanState({ status: 'error', data: null, error: error.message })
@@ -2840,7 +2876,7 @@ window.__ModuleLoader__.load({
       const toggleScanPick = (endpoint) =>
         setScanPicked((current) => {
           const next = new Set(current)
-          const key = `${endpoint.httpMethod} ${endpoint.path}`
+          const key = scanKey(endpoint)
           if (next.has(key)) next.delete(key)
           else next.add(key)
           return next
@@ -2849,7 +2885,7 @@ window.__ModuleLoader__.load({
       const pickAllScanRows = () =>
         setScanPicked((current) => {
           const list = (scanState.data && scanState.data.endpoints) || []
-          const keys = list.map((endpoint) => `${endpoint.httpMethod} ${endpoint.path}`)
+          const keys = list.map((endpoint) => scanKey(endpoint))
           return current.size === keys.length ? new Set() : new Set(keys)
         })
 
@@ -2887,15 +2923,26 @@ window.__ModuleLoader__.load({
       /** Ticking rows is a request; importing them is one POST for the whole batch. */
       const importPickedScan = async () => {
         const list = (scanState.data && scanState.data.endpoints) || []
+        // Each pick carries the endpoint's own source coordinates. A route alone
+        // is ambiguous — two controllers can both declare `GET /` — and the Host
+        // needs the difference to write both cases instead of one plus a
+        // "already there".
         const endpoints = list
-          .filter((endpoint) => scanPicked.has(`${endpoint.httpMethod} ${endpoint.path}`))
-          .map((endpoint) => ({ method: endpoint.httpMethod, path: endpoint.path }))
+          .filter((endpoint) => scanPicked.has(scanKey(endpoint)))
+          .map((endpoint) => ({
+            method: endpoint.httpMethod,
+            path: endpoint.path,
+            controller: endpoint.controller,
+            javaMethod: endpoint.javaMethod,
+            file: endpoint.file,
+            line: endpoint.line,
+          }))
         if (endpoints.length === 0) return
         const database = (registry.databases || []).length === 1 ? registry.databases[0].name : undefined
         setScanImporting(true)
         setScanImportError(null)
         try {
-          const result = await apiPost('/import-endpoints', { endpoints, database })
+          const result = await apiPost('/import-endpoints', { endpoints, database, ...scanScope(project) })
           await importedEndpoints(result)
         } catch (error) {
           setScanImportError(error.message)
