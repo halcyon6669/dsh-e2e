@@ -247,17 +247,14 @@ window.__ModuleLoader__.load({
         'action.editProjects': 'Edit',
         'action.doneEditing': 'Done',
         'action.deleteSelected': 'Delete selected ({count})',
-        'notice.projectsDeleted': '{count} project(s) deleted.',
-        'notice.projectsPartlyDeleted': '{done} deleted, {failed} failed: {errors}',
-        'label.pickProjects': 'Pick this project',
         'action.create': 'Create',
         'action.creating': 'Creating…',
         'notice.projectCreated': 'Project {name} created. Base URL {baseUrl} was read from the project; cases live in {dir}.',
         'field.projectName': 'Project name (letters, digits, dashes)',
         'field.projectPath': 'Project path (required — the Base URL is read from its application.yml)',
-        'label.projectDeleted': 'Project {name} deleted.',
-        'label.deleteProject': 'Delete project',
-        'label.deleteProjectConfirm': 'Delete for real (cases stay, history stays)',
+        'notice.projectsDeleted': '{count} project(s) deleted.',
+        'notice.projectsPartlyDeleted': '{done} deleted, {failed} failed: {errors}',
+        'label.pickProjects': 'Pick this project',
         'label.diagnostic': 'Diagnostics',
         'label.actions': 'Actions',
         'label.selectCase': 'Select this case',
@@ -501,17 +498,14 @@ window.__ModuleLoader__.load({
         'action.editProjects': '编辑',
         'action.doneEditing': '完成',
         'action.deleteSelected': '删除所选（{count}）',
-        'notice.projectsDeleted': '已删除 {count} 个项目。',
-        'notice.projectsPartlyDeleted': '已删除 {done} 个，{failed} 个失败：{errors}',
-        'label.pickProjects': '选中这个项目',
         'action.create': '创建',
         'action.creating': '创建中…',
         'notice.projectCreated': '项目 {name} 已创建。Base URL（{baseUrl}）是从项目里读出来的；用例放在 {dir}。',
         'field.projectName': '项目名（字母、数字、短横线）',
         'field.projectPath': '项目路径（必填 — Base URL 会从它的 application.yml 读取）',
-        'label.projectDeleted': '项目 {name} 已删除。',
-        'label.deleteProject': '删除项目',
-        'label.deleteProjectConfirm': '确认删除（用例保留，历史保留）',
+        'notice.projectsDeleted': '已删除 {count} 个项目。',
+        'notice.projectsPartlyDeleted': '已删除 {done} 个，{failed} 个失败：{errors}',
+        'label.pickProjects': '选中这个项目',
         'label.diagnostic': '诊断与异常',
         'label.actions': '操作',
         'label.selectCase': '选中这条用例',
@@ -693,7 +687,7 @@ window.__ModuleLoader__.load({
      * the percentages are derived from counts the Host already computed, so the
      * page and the agent can never disagree about them.
      */
-    function ProjectTable({ t, projects, onOpen, onDelete, pendingDelete, creator, editing, picked, onPick }) {
+    function ProjectTable({ t, projects, onOpen, creator, editing, picked, onPick }) {
       if (!projects || projects.length === 0) {
         return h('div', { className: 'e2e-empty-box' }, t('empty.noProjects'))
       }
@@ -706,10 +700,8 @@ window.__ModuleLoader__.load({
           const pct = (value) => (total > 0 ? `${Math.round((value / total) * 1000) / 10}%` : '0%')
           const rate = total > 0 ? pct(counts.passed) : '—'
           const allPassed = total > 0 && counts.passed === total
-          const armed = Boolean(pendingDelete && pendingDelete.key === project.key)
-          // The card is a button, and a button inside a button is the kind of
-          // markup browsers "fix" by breaking: the delete control sits beside the
-          // card, wrapped together in a positioned cell.
+          // The card is a button; in edit mode it picks instead of opens, and
+          // the checkbox beside it carries the state for keyboard and touch.
           return h(
             'div',
             { key: project.key, className: `e2e-project-cell${editing && picked.has(project.key) ? ' is-picked' : ''}` },
@@ -777,21 +769,6 @@ window.__ModuleLoader__.load({
                   `${t('label.lastInspected')}: ${relativeTime(t, project.lastActivityAt)}`,
                 ),
               ),
-            ),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: `e2e-project-delete${armed ? ' is-armed' : ''}`,
-                title: armed ? t('label.deleteProjectConfirm') : t('label.deleteProject'),
-                'aria-label': `${t('label.deleteProject')}: ${project.name}`,
-                onClick: (event) => {
-                  event.stopPropagation()
-                  onDelete(project)
-                },
-                style: editing ? { display: 'none' } : undefined,
-              },
-              armed ? t('label.deleteProjectConfirm') : '×',
             ),
           )
         }),
@@ -2938,34 +2915,6 @@ window.__ModuleLoader__.load({
         }
       }
 
-      // Deleting a project is a registry edit and a directory removal on the
-      // Host, so it asks twice like a case delete does — and forgets the first
-      // press as fast, because an armed confirm across a coffee break is a trap
-      // with a timer.
-      const [projectPendingDelete, setProjectPendingDelete] = React.useState(null)
-      React.useEffect(() => {
-        if (!projectPendingDelete) return undefined
-        const timer = setTimeout(() => setProjectPendingDelete(null), 4000)
-        return () => clearTimeout(timer)
-      }, [projectPendingDelete])
-      const deleteProject = async (project) => {
-        if (!projectPendingDelete || projectPendingDelete.key !== project.key) {
-          setProjectPendingDelete(project)
-          return
-        }
-        setProjectPendingDelete(null)
-        setBusy('delete-project')
-        try {
-          await apiDelete(`/project?name=${q(project.name)}`)
-          setNotice({ message: t('label.projectDeleted', { name: project.name }) })
-          await refresh()
-        } catch (error) {
-          setNotice({ isError: true, message: error.message })
-        } finally {
-          setBusy(null)
-        }
-      }
-
       // Edit mode turns the landing page into a picker: cards select instead of
       // open, and the header offers one delete for everything picked. The
       // checkboxes are the confirmation — a card that was explicitly ticked does
@@ -3618,8 +3567,6 @@ window.__ModuleLoader__.load({
               t,
               projects,
               creator: projectData.creator,
-              onDelete: deleteProject,
-              pendingDelete: projectPendingDelete,
               editing: editingProjects,
               picked: pickedProjects,
               onPick: togglePicked,
@@ -3832,28 +3779,6 @@ window.__ModuleLoader__.load({
   border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 55%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, transparent);
 }
-.e2e-project-delete {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 110ms ease, background 110ms ease, color 110ms ease;
-}
-.e2e-project-cell:hover .e2e-project-delete { opacity: 1; }
-.e2e-project-delete:hover { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent); color: var(--dsw-alias-state-error-primary); }
-.e2e-project-delete.is-armed { opacity: 1; background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent); color: var(--dsw-alias-state-error-primary); font-size: 9px; font-weight: 600; width: auto; padding: 0 8px; white-space: nowrap; }
 .e2e-project-card {
   appearance: none;
   border: 1px solid var(--dsw-alias-border-l1);

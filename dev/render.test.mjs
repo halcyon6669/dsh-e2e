@@ -547,17 +547,24 @@ await test('the landing page offers to create a project, and the form appears in
   assert.ok(submit, 'the form has its own create button')
 })
 
-await test('each project card offers to delete the project, with a two-press confirm', async () => {
+await test('the landing page has no per-card delete; deletion lives in edit mode', async () => {
   const cards = elementsOf(landing).filter((node) => node.props && String(node.props.className || '').split(' ').includes('e2e-project-card'))
   assert.ok(cards.length > 0, 'the landing page shows project cards')
   const deleteButtons = elementsOf(landing).filter(
     (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-project-delete'),
   )
-  assert.equal(deleteButtons.length, cards.length, 'every project card carries its own delete control')
-  // First press arms it; the button then says what the second press will do.
-  deleteButtons[0].props.onClick({ stopPropagation() {} })
-  const armed = await settle(() => mainComponent({}))
-  assert.match(textOf(armed), /Delete for real/, 'the armed delete says what the second press does')
+  assert.equal(deleteButtons.length, 0, 'cards carry no delete control of their own')
+  // Enter edit mode: every card grows a checkbox, and picking one arms the
+  // header's batch delete with the ticked count.
+  const editButton = elementsOf(landing).find((node) => node.props && node.props.onClick && textOf(node) === 'Edit')
+  assert.ok(editButton, 'the header offers Edit')
+  editButton.props.onClick()
+  const editing = await settle(() => mainComponent({}))
+  const picks = elementsOf(editing).filter((node) => node.props && node.props.className === 'e2e-project-pick')
+  assert.equal(picks.length, cards.length, 'every project card offers a checkbox in edit mode')
+  picks[0].props.onChange()
+  const picked = await settle(() => mainComponent({}))
+  assert.match(textOf(picked), /Delete selected \(1\)/, 'the header counts what is picked')
 })
 
 await test('results render as counts, not one summary word', () => {
