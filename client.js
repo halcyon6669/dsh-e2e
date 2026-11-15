@@ -743,7 +743,7 @@ window.__ModuleLoader__.load({
                 'div',
                 { className: 'e2e-project-stack' },
                 h('span', null, project.projectPath || project.baseUrl || project.key),
-                h('span', { className: 'e2e-project-stack-target' }, project.targets && project.targets.length ? project.targets.map((item) => item.name).join(', ') : ''),
+                h('span', { className: 'e2e-project-stack-target' }, project.targets && project.targets.length ? project.targets.join(', ') : ''),
               ),
               total > 0
                 ? h(
@@ -2934,17 +2934,24 @@ window.__ModuleLoader__.load({
         setPickedProjects(new Set())
       }
       const deletePicked = async () => {
-        const targets = projects.filter((item) => pickedProjects.has(item.key))
-        if (targets.length === 0) return
+        // The registry knows targets, not display names: a card called "Record"
+        // may stand for one target or several, so every registry name behind
+        // each picked card is deleted in turn, and the card disappears when its
+        // last target goes.
+        const names = []
+        for (const project of projects.filter((item) => pickedProjects.has(item.key))) {
+          for (const name of project.targets || []) names.push(name)
+        }
+        if (names.length === 0) return
         setBusy('delete-picked')
         const errors = []
         let done = 0
-        for (const target of targets) {
+        for (const name of names) {
           try {
-            await apiDelete(`/project?name=${q(target.name)}`)
+            await apiDelete(`/project?name=${q(name)}`)
             done += 1
           } catch (error) {
-            errors.push(`${target.name}: ${error.message}`)
+            errors.push(`${name}: ${error.message}`)
           }
         }
         setBusy(null)
