@@ -376,7 +376,23 @@ const REUSED_REPORT = {
 }
 
 /** What the report route answers; swapped by the test that needs another run. */
-let pastReport = PAST_REPORT// Two controllers declaring the same route is what a real project looks like, and
+let pastReport = PAST_REPORT
+
+/* What the Host reads out of the project's own application.yml. The form calls
+   this the moment a folder is chosen, so the port field starts on the number the
+   project declares — and empty when it declares none, which is never 8080. */
+const PROJECT_CONFIG = {
+  ok: true,
+  projectPath: 'E:/project/backend/Record',
+  baseUrl: 'http://127.0.0.1:8443',
+  port: 8443,
+  contextPath: '',
+  scheme: 'http',
+  source: 'src/main/resources/application.yml',
+  warnings: [],
+}
+
+// Two controllers declaring the same route is what a real project looks like, and
 // it is what a route-only identity gets wrong: the second one collapses onto the
 // first, or reports itself "already there".
 const SCAN = {
@@ -428,6 +444,7 @@ const SETTINGS = {
     {
       name: 'record-local',
       baseUrl: 'https://127.0.0.1:8443',
+      port: 8443,
       projectPath: 'E:/project/backend/Record',
       configurationName: '',
       caseDir: 'C:\\cases',
@@ -485,15 +502,17 @@ globalThis.fetch = async (url, options) => {
       ? CASE_FILE
       : path.startsWith('/report?')
         ? pastReport
-        : path.startsWith('/scan')
-          ? SCAN
-          : path.startsWith('/import-endpoints')
-            ? { ok: true, written: [{ endpoint: 'POST /auth/register', caseId: 'REG-009' }], skipped: [] }
-            : path.startsWith('/settings')
-              ? method === 'POST'
-                ? { ok: true, changes: [], settings: SETTINGS }
-                : SETTINGS
-              : BOOTSTRAP
+        : path.startsWith('/project-config')
+          ? PROJECT_CONFIG
+          : path.startsWith('/scan')
+            ? SCAN
+            : path.startsWith('/import-endpoints')
+              ? { ok: true, written: [{ endpoint: 'POST /auth/register', caseId: 'REG-009' }], skipped: [] }
+              : path.startsWith('/settings')
+                ? method === 'POST'
+                  ? { ok: true, changes: [], settings: SETTINGS }
+                  : SETTINGS
+                : BOOTSTRAP
   return { ok: true, status: 200, json: async () => body }
 }
 
@@ -668,14 +687,17 @@ await test('the landing page offers to create a project, and the form appears in
   const inputs = elementsOf(opened).filter(
     (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'),
   )
-  // The form asks for the folder and nothing else: the Base URL is read from the
-  // project's application.yml, the project's name is the folder's name, and the
-  // run configuration / remote-host fields were removed — local e2e needs neither.
+  // The form asks for two things now: the folder, and the port when the project
+  // declares none. The Base URL is still read from the project's application.yml,
+  // the project's name is the folder's name, and the run configuration /
+  // remote-host fields stay removed — local e2e needs neither.
   assert.ok(inputs.length >= 1, `expected the project path field, found ${inputs.length}`)
-  assert.equal(inputs.length, 1, `expected only the project path field, found ${inputs.length}`)
+  assert.equal(inputs.length, 2, `expected the path field and the port field, found ${inputs.length}`)
   // A placeholder is a prop, not text content: assert on it where it lives.
   const pathField = inputs.find((node) => /Project path \(required/.test(String(node.props.placeholder || '')))
   assert.ok(pathField, 'the path field says the Base URL is derived')
+  const portField = inputs.find((node) => String(node.props.className || '').split(' ').includes('e2e-project-port'))
+  assert.ok(portField, 'the form has a port field beside the path')
   const submit = elementsOf(opened).find(
     (node) =>
       node.props &&
@@ -698,7 +720,15 @@ await test('the landing page offers to create a project, and the form appears in
   const chosen = await settle(() => mainComponent({}))
   const pathValue = (tree) =>
     elementsOf(tree).filter((node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'))[0].props.value
+  const portValue = (tree) =>
+    elementsOf(tree)
+      .filter((node) => node.props && String(node.props.className || '').split(' ').includes('e2e-project-port'))
+      .map((node) => String(node.props.value || ''))
+      .pop()
   assert.equal(pathValue(chosen), 'C:\\work', 'the folder the dialog returned becomes the project path')
+  // The port comes from the project's own application.yml, read the moment the
+  // folder is known — the reader should not have to look it up themselves.
+  assert.equal(portValue(chosen), '8443', 'the port the project declares fills the field on its own')
   // The button beside the field does the same thing, for anyone looking for one.
   const browse = elementsOf(opened).find(
     (node) =>
@@ -1283,6 +1313,13 @@ await test('the settings sheet puts the database source and the IDE configuratio
   assert.match(text, /IDE run configuration/, 'the IDE half has its own heading')
   assert.match(text, /RecordApplication/, 'the IDE listed a run configuration')
   assert.match(text, /Allow setup\/teardown SQL to write/, 'the write switch is on the same sheet')
+  // The address is editable here too: the port the project declares is shown,
+  // and a project that declares none shows an empty field to type into.
+  const portInput = elementsOf(opened).find(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-settings-port'),
+  )
+  assert.ok(portInput, 'the sheet has a port field')
+  assert.equal(String(portInput.props.value), '8443', 'it opens on the port the target addresses')
 })
 
 await test('picking a source and saving writes the registry, not the page', async () => {
@@ -1314,6 +1351,34 @@ await test('picking a source and saving writes the registry, not the page', asyn
     'E:/project/backend/Record',
     'the IDE list belongs to the open checkout, so the save says which one',
   )
+})
+
+await test('a typed port becomes the target address, and the rest of the URL is kept', async () => {
+  let tree = await settle(() => mainComponent({}))
+  const settingsButton = elementsOf(tree).find(
+    (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /^Settings$/.test(textOf(node)),
+  )
+  assert.ok(settingsButton, 'the top bar carries the settings entry point')
+  settingsButton.props.onClick()
+  const opened = await settle(() => mainComponent({}))
+  const portInput = elementsOf(opened).find(
+    (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-settings-port'),
+  )
+  assert.ok(portInput, 'the sheet has a port field')
+  portInput.props.onChange({ target: { value: '9090' } })
+  const afterTyping = await settle(() => mainComponent({}))
+  const save = elementsOf(afterTyping).find(
+    (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /^Save$/.test(textOf(node)),
+  )
+  assert.ok(save, 'the sheet has a save button')
+  save.props.onClick()
+  await settle(() => mainComponent({}))
+
+  const sent = posted.filter((entry) => entry.path.startsWith('/settings')).pop()
+  assert.ok(sent, 'saving reached the Host')
+  // Only the port changed: the scheme and host the registry already carried are
+  // kept, because moving a service to another port is not a rewrite of where it is.
+  assert.equal(sent.body.target.baseUrl, 'https://127.0.0.1:9090')
 })
 
 /* ---- the detail page: verdict card, tab strip, inspection rail ---- */

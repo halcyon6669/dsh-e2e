@@ -831,13 +831,31 @@ export function createPanel({ ctx, config = {}, state }) {
       } catch (error) {
         throw new PanelError(`cannot read the project's server configuration: ${error.message}`, 422, { projectPath })
       }
-      baseUrl = derived.baseUrl || ''
-      if (!baseUrl) {
-        throw new PanelError(
-          `could not derive a Base URL from ${projectPath}: ${(derived.warnings || []).join('; ') || 'no server.port found'}`,
-          422,
-          { projectPath, warnings: derived.warnings },
-        )
+      // The port is the one thing a project may not declare. When the reader
+      // typed one it wins; when the yaml names one it is used; when neither
+      // happened there is nothing to invent — Spring's 8080 belongs to a
+      // framework, and a project born on the wrong port fails every case with a
+      // connection error that says nothing about the project.
+      const typed = input.port === undefined || input.port === null ? '' : String(input.port).trim()
+      if (typed !== '') {
+        const port = Number(typed)
+        if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+          throw new PanelError(`"${typed}" is not a usable port; give a number between 1 and 65535`, 422, { port: typed })
+        }
+        const scheme = derived.scheme || 'http'
+        const path = String(derived.contextPath || '').replace(/^\/*/, '').replace(/\/*$/, '')
+        baseUrl = `${scheme}://127.0.0.1:${port}${path ? `/${path}` : ''}`
+      } else {
+        baseUrl = derived.baseUrl || ''
+        if (!baseUrl) {
+          throw new PanelError(
+            `the project's configuration names no port, so the Base URL cannot be derived: ${
+              (derived.warnings || []).join('; ') || 'no server.port found'
+            }. Give the port the service binds to.`,
+            422,
+            { projectPath, warnings: derived.warnings, needsPort: true },
+          )
+        }
       }
     }
     const problems = auditBaseUrl(baseUrl, { allowRemote: input.allowRemote === true })
@@ -1113,6 +1131,8 @@ export function createPanel({ ctx, config = {}, state }) {
     { method: 'POST', path: '/scan', mutate: true, handler: async (body) => scan(body) },
     { method: 'POST', path: '/scaffold', mutate: true, handler: async (body) => scaffold(body) },
     { method: 'POST', path: '/import-endpoints', mutate: true, handler: async (body) => importEndpoints(body) },
+    { method: 'GET', path: '/project-config', handler: async (_body, url) =>
+      deriveProject({ projectPath: url.searchParams.get('projectPath') || '', ideHost: undefined, idePort: undefined }) },
     { method: 'GET', path: '/settings', handler: async (_body, url) =>
       readSettings({
         projectPath: url.searchParams.get('projectPath') || '',
@@ -1121,6 +1141,27 @@ export function createPanel({ ctx, config = {}, state }) {
       }) },
     { method: 'POST', path: '/settings', mutate: true, handler: async (body) => saveSettings(body) },
   ]
+
+  /**
+   * What the project's own configuration says about where it listens.
+   *
+   * The create form and the settings sheet both need this one answer: a port
+   * read from `application.yml`, or nothing at all when the file names none.
+   * Nothing is invented here — the caller decides what an empty port means.
+   */
+  async function deriveProject(input = {}) {
+    const projectPath = String(input.projectPath || '').trim() || (await defaultProjectPath())
+    if (!projectPath) {
+      throw new PanelError('no project path to read: pass one, or give the registry target a projectPath', 422)
+    }
+    const { guessBaseUrl } = await import('./scan.js')
+    try {
+      const derived = await guessBaseUrl(projectPath)
+      return { ok: true, projectPath, ...derived }
+    } catch (error) {
+      throw new PanelError(`cannot read ${projectPath}: ${error.message}`, 422, { projectPath })
+    }
+  }
 
   /**
    * Reads the project's Spring annotations and returns its endpoints.
@@ -1398,9 +1439,19 @@ export function createPanel({ ctx, config = {}, state }) {
     if (registry) {
       for (const name of knownNames(registry, 'targets')) {
         const entry = registry.targets[name] || {}
+        const baseUrl = entry.baseUrl ? String(entry.baseUrl) : ''
+        let port = null
+        try {
+          const parsed = new URL(baseUrl)
+          port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80
+        } catch {
+          // A malformed baseUrl is the reader's to see as written; the sheet
+          // shows no port for it rather than a number it made up.
+        }
         targets.push({
           name,
-          baseUrl: entry.baseUrl ? String(entry.baseUrl) : '',
+          baseUrl,
+          port,
           projectPath: entry.projectPath ? String(entry.projectPath) : '',
           configurationName: entry.configurationName ? String(entry.configurationName) : '',
           caseDir: entry.caseDir ? String(entry.caseDir) : '',
@@ -1444,10 +1495,11 @@ export function createPanel({ ctx, config = {}, state }) {
   /**
    * Writes the settings that live in the registry.
    *
-   * Two edits exist today: a target's IDE run configuration, and a database
-   * pointing at a dsh-db-mcp source instead of carrying its own host and
-   * password. Both go through `writeEntry`, which edits the file's text — the
-   * registry is hand-written and its comments have to survive.
+   * Three edits exist today: a target's address (the port it binds), a target's
+   * IDE run configuration, and a database pointing at a dsh-db-mcp source
+   * instead of carrying its own host and password. All of them go through
+   * `writeEntry`, which edits the file's text — the registry is hand-written and
+   * its comments have to survive.
    */
   async function saveSettings(input = {}) {
     const dir = roots()[0] || defaultCaseDir({ state })
@@ -1459,6 +1511,20 @@ export function createPanel({ ctx, config = {}, state }) {
       if (target.configurationName !== undefined) {
         const value = String(target.configurationName || '').trim()
         fields.configurationName = value === '' ? null : value
+      }
+      // The address is editable here because the port a project listens on is
+      // not always in its yaml — and when it is not, this is the one place the
+      // number can be written down without hand-editing the registry. The same
+      // rules a run applies are applied to it: a project cannot be pointed at
+      // production from a settings sheet either.
+      if (target.baseUrl !== undefined) {
+        const value = String(target.baseUrl || '').trim()
+        if (value === '') {
+          throw new PanelError(`the target "${name}" needs an address; give the port its service binds to`, 422)
+        }
+        const problems = auditBaseUrl(value, { allowRemote: target.allowRemote === true })
+        if (problems.length > 0) throw new PanelError(`the address was refused: ${problems.join('; ')}`, 422, { problems })
+        fields.baseUrl = value
       }
       const written = await writeEntry({ config, caseDir: dir, section: 'targets', name, fields })
       changes.push({ section: 'targets', name, file: written.file, changed: written.changed })
@@ -1558,6 +1624,7 @@ export function createPanel({ ctx, config = {}, state }) {
     batchStatus,
     createProject,
     deleteProject,
+    deriveProject,
     importEndpoints,
     readSettings,
     saveSettings,

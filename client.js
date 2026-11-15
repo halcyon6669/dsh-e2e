@@ -83,6 +83,9 @@ window.__ModuleLoader__.load({
         'label.settingsNotPostgres': 'not PostgreSQL-wire, cannot be used',
         'label.settingsIde': 'IDE run configuration',
         'label.settingsTarget': 'Target',
+        'label.settingsPort': 'Port',
+        'label.settingsPortHint':
+          'Where the service listens. Read from the project\'s application.yml where that file names one; a project that names none leaves this empty, and the number has to be typed here.',
         'label.settingsConfiguration': 'Configuration',
         'label.settingsConfigurationNone': 'not set',
         'empty.noDatabases': 'The registry defines no database. Add one to the registry file, then pick it here.',
@@ -279,6 +282,7 @@ window.__ModuleLoader__.load({
         'action.creating': 'Creating…',
         'notice.projectCreated': 'Project {name} created. Base URL {baseUrl} was read from the project; cases live in {dir}.',
         'field.projectPath': 'Project path (required — the Base URL is read from its application.yml)',
+        'field.projectPort': 'Port (read from application.yml, or type it)',
         'action.browse': 'Browse…',
         'notice.pickerUnavailable': 'This window has no system file manager, so type the project path instead.',
         'notice.projectsDeleted': '{count} project(s) deleted.',
@@ -365,6 +369,9 @@ window.__ModuleLoader__.load({
         'label.settingsNotPostgres': '不是 PostgreSQL 协议，用不了',
         'label.settingsIde': 'IDE 运行配置',
         'label.settingsTarget': '目标',
+        'label.settingsPort': '端口',
+        'label.settingsPortHint':
+          '服务监听的端口。项目的 application.yml 里写了就从那里读；没写的项目这里留空，需要手工填进去。',
         'label.settingsConfiguration': '配置',
         'label.settingsConfigurationNone': '未设置',
         'empty.noDatabases': '注册表里没有数据库。先在注册表文件里加一个，再回来选。',
@@ -556,6 +563,7 @@ window.__ModuleLoader__.load({
         'action.creating': '创建中…',
         'notice.projectCreated': '项目 {name} 已创建。Base URL（{baseUrl}）是从项目里读出来的；用例放在 {dir}。',
         'field.projectPath': '项目路径（必填 — Base URL 会从它的 application.yml 读取）',
+        'field.projectPort': '端口（从 application.yml 读到，或手工填）',
         'action.browse': '浏览…',
         'notice.pickerUnavailable': '这个窗口没有系统文件管理器，请直接输入项目路径。',
         'notice.projectsDeleted': '已删除 {count} 个项目。',
@@ -694,16 +702,6 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The Desktop window hands the page a bridge to the OS folder dialog:
-     * `__DSH_DIRECTORY_PICKER__.pick()` resolves to the chosen folder, or null
-     * when the dialog was dismissed. It is the same mechanism the Harness's own
-     * workspace picker uses, so the create form opens the real file manager
-     * instead of a second browser written by hand.
-     *
-     * Absent when the panel is open in an ordinary browser tab (the bridge is
-     * only exposed on the dsh-app:// document): there the field stays typeable.
-     */
-    /**
      * What identifies one scanned row.
      *
      * Not the route: two controllers in one project can both declare `GET /`,
@@ -717,6 +715,16 @@ window.__ModuleLoader__.load({
       return `${endpoint.httpMethod} ${endpoint.path} ${where}`
     }
 
+    /**
+     * The Desktop window hands the page a bridge to the OS folder dialog:
+     * `__DSH_DIRECTORY_PICKER__.pick()` resolves to the chosen folder, or null
+     * when the dialog was dismissed. It is the same mechanism the Harness's own
+     * workspace picker uses, so the create form opens the real file manager
+     * instead of a second browser written by hand.
+     *
+     * Absent when the panel is open in an ordinary browser tab (the bridge is
+     * only exposed on the dsh-app:// document): there the field stays typeable.
+     */
     function systemPicker() {
       const bridge = globalThis.__DSH_DIRECTORY_PICKER__
       return bridge && typeof bridge.pick === 'function' ? bridge : null
@@ -2598,6 +2606,7 @@ window.__ModuleLoader__.load({
         t,
         settings,
         target,
+        port,
         database,
         source,
         config,
@@ -2606,6 +2615,7 @@ window.__ModuleLoader__.load({
         error,
         onClose,
         onTarget,
+        onPort,
         onDatabase,
         onSource,
         onConfig,
@@ -2701,6 +2711,19 @@ window.__ModuleLoader__.load({
                     (data.targets || []).map((entry) => h('option', { key: entry.name, value: entry.name }, entry.name)),
                   ),
                 ),
+            (data.targets || []).length === 0
+              ? null
+              : field(
+                  t('label.settingsPort'),
+                  h('input', {
+                    className: 'e2e-input e2e-settings-port',
+                    inputMode: 'numeric',
+                    placeholder: t('field.projectPort'),
+                    value: port,
+                    onChange: (event) => onPort(event.target.value),
+                  }),
+                ),
+            (data.targets || []).length === 0 ? null : h('div', { className: 'e2e-hint' }, t('label.settingsPortHint')),
             ide.error
               ? h('div', { className: 'e2e-muted' }, ide.error)
               : configurations.length === 0
@@ -2772,9 +2795,12 @@ window.__ModuleLoader__.load({
       const [keepRunning, setKeepRunning] = React.useState(false)
       const [explaining, setExplaining] = React.useState(false)
       const [creating, setCreating] = React.useState(null) // 'project' on the landing page, a draft file name inside one
-      // The create-project form's draft. Reset whenever the form closes. Only
-      // the path: the project's name is the folder's name, and the Host says so.
-      const [projectDraft, setProjectDraft] = React.useState({ projectPath: '' })
+      // The create-project form's draft. Reset whenever the form closes. The
+      // path names the project — the folder's name is the project's name — and
+      // the port is read from the project's own configuration the moment a
+      // folder is chosen. It stays empty when that configuration names none,
+      // and then it is the reader's to type.
+      const [projectDraft, setProjectDraft] = React.useState({ projectPath: '', port: '' })
       // True while the system folder dialog is open, so a second click on the
       // path cannot stack a second dialog on top of the first.
       const [pickingFolder, setPickingFolder] = React.useState(false)
@@ -2800,6 +2826,11 @@ window.__ModuleLoader__.load({
       const [settingsState, setSettingsState] = React.useState({ status: 'idle', data: null, error: null })
       const [settingsBusy, setSettingsBusy] = React.useState(false)
       const [settingsTarget, setSettingsTarget] = React.useState('')
+      // The port the chosen target's service listens on. It arrives from the
+      // registry (which got it from the project's yaml, or from the reader on
+      // the create form) and it is editable here because a project can move
+      // before anyone re-creates it.
+      const [settingsPort, setSettingsPort] = React.useState('')
       const [settingsDatabase, setSettingsDatabase] = React.useState('')
       const [settingsSource, setSettingsSource] = React.useState('')
       const [settingsConfig, setSettingsConfig] = React.useState('')
@@ -3229,6 +3260,10 @@ window.__ModuleLoader__.load({
           const firstTarget = targets.find((entry) => entry.name === wanted) || (targets.length > 0 ? targets[0] : null)
           setSettingsTarget(firstTarget ? firstTarget.name : '')
           setSettingsConfig(firstTarget && firstTarget.configurationName ? firstTarget.configurationName : '')
+          // An empty port is a real answer here: the project's yaml named none
+          // and the reader has not typed one yet, so the field is empty rather
+          // than showing 8080 or the port of some other project.
+          setSettingsPort(firstTarget && firstTarget.port ? String(firstTarget.port) : '')
           setSettingsDatabase(databases.length > 0 ? databases[0].name : '')
           const firstDatabase = databases.length > 0 ? databases[0] : null
           setSettingsSource(firstDatabase && firstDatabase.from === 'db-mcp' ? firstDatabase.id : '')
@@ -3243,6 +3278,7 @@ window.__ModuleLoader__.load({
         const targets = (settingsState.data && settingsState.data.targets) || []
         const found = targets.find((entry) => entry.name === name)
         setSettingsConfig(found && found.configurationName ? found.configurationName : '')
+        setSettingsPort(found && found.port ? String(found.port) : '')
       }
 
       const pickSettingsDatabase = (name) => {
@@ -3253,18 +3289,52 @@ window.__ModuleLoader__.load({
       }
 
       /**
+       * Turns a target's current address plus the typed port into the address
+       * the sheet should write.
+       *
+       * Only the port is editable, so the scheme and host are kept: changing
+       * them is a different decision than "the service moved to this port", and
+       * a sheet that silently rewrote them would be doing more than it said.
+       * With no address at all, the default local shape is the only honest
+       * guess — this tool tests a service on this machine.
+       */
+      const addressWithPort = (entry, typed) => {
+        const port = String(typed || '').trim()
+        if (port === '') return ''
+        const current = entry && entry.baseUrl ? String(entry.baseUrl) : ''
+        try {
+          const parsed = new URL(current)
+          parsed.port = port
+          return parsed.href.replace(/\/$/, '')
+        } catch {
+          return `http://127.0.0.1:${port}`
+        }
+      }
+
+      /**
        * Writes what the sheet changed and re-reads it.
        *
-       * Two kinds of edit go out together: the target's IDE run configuration and
-       * the database's dsh-db-mcp source. The answer carries the fresh settings,
-       * so the sheet stays open showing what the registry now says instead of a
-       * stale copy of what was just typed.
+       * Three kinds of edit go out together: the target's address (its port),
+       * the target's IDE run configuration, and the database's dsh-db-mcp
+       * source. The answer carries the fresh settings, so the sheet stays open
+       * showing what the registry now says instead of a stale copy of what was
+       * just typed.
        */
       const saveSettingsSheet = async () => {
         setSettingsBusy(true)
         try {
           const payload = { projectPath: project && project.projectPath ? project.projectPath : '' }
-          if (settingsTarget) payload.target = { name: settingsTarget, configurationName: settingsConfig }
+          if (settingsTarget) {
+            const targets = (settingsState.data && settingsState.data.targets) || []
+            const current = targets.find((entry) => entry.name === settingsTarget) || null
+            const address = addressWithPort(current, settingsPort)
+            const target = { name: settingsTarget, configurationName: settingsConfig }
+            // Only send the address when the reader actually set a port: an
+            // empty field means "the yaml named none and nobody typed one",
+            // which must not overwrite the address already in the registry.
+            if (address !== '') target.baseUrl = address
+            payload.target = target
+          }
           if (settingsDatabase) {
             payload.database = settingsSource
               ? { name: settingsDatabase, from: 'db-mcp', id: settingsSource }
@@ -3413,11 +3483,38 @@ window.__ModuleLoader__.load({
           const chosen = await picker.pick()
           if (typeof chosen === 'string' && chosen.trim() !== '') {
             setProjectDraft((draft) => ({ ...draft, projectPath: chosen }))
+            await readPort(chosen)
           }
         } catch (error) {
           setNotice({ isError: true, message: String((error && error.message) || error) })
         } finally {
           setPickingFolder(false)
+        }
+      }
+
+      /**
+       * Reads the port the project declares, and leaves the field empty when it
+       * declares none.
+       *
+       * The field is not filled with a default: Spring's 8080 belongs to a
+       * framework, not to this checkout, and a project born on an assumed port
+       * fails every case with a connection error that says nothing about the
+       * project. An answer of `port: null` is the normal answer here — it means
+       * "type the number", which the Host then insists on.
+       */
+      const readPort = async (projectPath) => {
+        const trimmed = String(projectPath || '').trim()
+        if (trimmed === '') return
+        try {
+          const config = await apiGet(`/project-config?projectPath=${q(trimmed)}`)
+          setProjectDraft((draft) => ({
+            ...draft,
+            port: config && config.port ? String(config.port) : '',
+          }))
+        } catch {
+          // A folder that cannot be read yet is not an error to shout about:
+          // the reader may still be typing the path, and create is what reports
+          // it properly.
         }
       }
 
@@ -3431,7 +3528,7 @@ window.__ModuleLoader__.load({
           const result = await apiPost('/project', projectDraft)
           setNotice({ message: t('notice.projectCreated', { name: result.name, baseUrl: result.baseUrl, dir: result.caseDir }) })
           setCreating(null)
-          setProjectDraft({ projectPath: '' })
+          setProjectDraft({ projectPath: '', port: '' })
           await refresh()
         } catch (error) {
           setNotice({ isError: true, message: error.message })
@@ -3716,14 +3813,15 @@ window.__ModuleLoader__.load({
         // On the landing page the subtitle line is the create-project form. It
         // occupies the strip the reader just asked to be quieter: the same
         // height, now earning it. No Base URL field: the Host reads it from the
-        // project's application.yml, so the path is the only thing to type.
+        // project's application.yml, so the path and (when the yaml is silent)
+        // the port are the only things to type.
         !project && creating === 'project'
           ? h(
               'div',
               { className: 'e2e-crumbs e2e-project-create' },
-              // The path is the whole form. A project's name is the name of the
-              // folder it lives in — asking for it again would be asking the
-              // reader to name the same thing twice, and the Host derives it.
+              // The path names the project: a project's name is the name of the
+              // folder it lives in, and asking for it again would be asking the
+              // reader to name the same thing twice.
               h('input', {
                 className: 'e2e-input e2e-project-field is-wide',
                 placeholder: t('field.projectPath'),
@@ -3731,12 +3829,28 @@ window.__ModuleLoader__.load({
                 onClick: browseFolder,
                 onChange: (event) => setProjectDraft({ ...projectDraft, projectPath: event.target.value }),
               }),
+              // The port is filled in from the project's own configuration as
+              // soon as a folder is chosen, and left blank when that file names
+              // none — there is no default to fall back on, and a project born
+              // on an assumed port fails every case for a reason that has
+              // nothing to do with the project.
+              h('input', {
+                className: 'e2e-input e2e-project-port',
+                placeholder: t('field.projectPort'),
+                value: projectDraft.port,
+                onChange: (event) => setProjectDraft({ ...projectDraft, port: event.target.value }),
+              }),
               h(Btn, { small: true, disabled: pickingFolder, onClick: browseFolder }, t('action.browse')),
               h('div', { className: 'e2e-spacer' }),
               h(Btn, { small: true, onClick: () => setCreating('') }, t('action.cancel')),
               h(
                 Btn,
-                { small: true, primary: true, disabled: busy === 'create' || !projectDraft.projectPath.trim(), onClick: createProject },
+                {
+                  small: true,
+                  primary: true,
+                  disabled: busy === 'create' || !projectDraft.projectPath.trim(),
+                  onClick: createProject,
+                },
                 busy === 'create' ? t('action.creating') : t('action.create'),
               ),
             )
@@ -4050,6 +4164,7 @@ window.__ModuleLoader__.load({
             t,
             settings: settingsState,
             target: settingsTarget,
+            port: settingsPort,
             database: settingsDatabase,
             source: settingsSource,
             config: settingsConfig,
@@ -4058,6 +4173,7 @@ window.__ModuleLoader__.load({
             error: settingsState.error,
             onClose: () => setSettingsOpen(false),
             onTarget: pickSettingsTarget,
+            onPort: setSettingsPort,
             onDatabase: pickSettingsDatabase,
             onSource: setSettingsSource,
             onConfig: setSettingsConfig,

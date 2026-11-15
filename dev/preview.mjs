@@ -274,6 +274,7 @@ const SETTINGS = {
     {
       name: 'record-local',
       baseUrl: 'https://127.0.0.1:8443',
+      port: 8443,
       projectPath: 'E:/project/backend/Record',
       configurationName: 'RecordApplication',
       caseDir: 'C:\\cases',

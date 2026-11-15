@@ -1300,10 +1300,57 @@ await testAsync('a folder with no server configuration says so instead of invent
     () => projectPanel.createProject({ projectPath: bare }),
     (error) => {
       assert.ok(error instanceof PanelError)
-      assert.match(error.message, /could not derive a Base URL/)
+      // No 8080 fallback: the field is empty and the message asks for the number.
+      assert.match(error.message, /names no port, so the Base URL cannot be derived/)
+      assert.match(error.message, /Give the port the service binds to/)
+      assert.equal(error.status, 422)
       return true
     },
   )
+})
+
+await testAsync('a folder that names no port is born on the port the reader typed', async () => {
+  const bare = join(tmpDir, 'typed-app')
+  await mkdir(bare, { recursive: true })
+  const result = await projectPanel.createProject({ projectPath: bare, port: '9411' })
+  assert.equal(result.name, 'typed-app')
+  assert.equal(result.baseUrl, 'http://127.0.0.1:9411', 'the typed port is the address')
+  const registry = await readFile(result.registryFile, 'utf8')
+  assert.match(registry, /  typed-app:\n {4}baseUrl: http:\/\/127\.0\.0\.1:9411\n/)
+})
+
+await testAsync('a typed port that is not a port is refused, in the reader\'s words', async () => {
+  const bare = join(tmpDir, 'bad-port-app')
+  await mkdir(bare, { recursive: true })
+  await assert.rejects(
+    () => projectPanel.createProject({ projectPath: bare, port: 'eighty' }),
+    (error) => {
+      assert.ok(error instanceof PanelError)
+      assert.match(error.message, /is not a usable port/)
+      return true
+    },
+  )
+})
+
+await testAsync('the yaml wins over the field, and the field stays empty when the yaml is silent', async () => {
+  // deriveProject is what the create form calls the moment a folder is chosen:
+  // it answers with the project's own port, or with null so the field is left
+  // empty for the reader to fill.
+  const silent = join(tmpDir, 'silent-app')
+  await mkdir(join(silent, 'src', 'main', 'resources'), { recursive: true })
+  await writeFile(join(silent, 'src', 'main', 'resources', 'application.yml'), 'spring:\n  application:\n    name: silent\n')
+  const quiet = await projectPanel.deriveProject({ projectPath: silent })
+  assert.equal(quiet.port, null, 'a project that declares no port has no port to show')
+  assert.equal(quiet.baseUrl, null)
+  assert.equal(quiet.scheme, 'http')
+  assert.match((quiet.warnings || []).join('; '), /the port is not filled in and has to be typed/)
+
+  const declared = join(tmpDir, 'declared-app')
+  await mkdir(join(declared, 'src', 'main', 'resources'), { recursive: true })
+  await writeFile(join(declared, 'src', 'main', 'resources', 'application.yml'), 'server:\n  port: 9455\n')
+  const loud = await projectPanel.deriveProject({ projectPath: declared })
+  assert.equal(loud.port, 9455)
+  assert.equal(loud.baseUrl, 'http://127.0.0.1:9455')
 })
 
 await testAsync('a fresh registry file gets a header that explains the conventions', async () => {

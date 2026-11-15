@@ -558,7 +558,11 @@ export { sampleFor, readDtoClass, stripComments }
  * Returns `{ baseUrl, port, contextPath, source }`, or `{ baseUrl: null, ... }`
  * with warnings when nothing can be derived 鈥?the caller decides whether that
  * is fatal. The scheme is `https` when a keystore is configured, `http`
- * otherwise; port 8080 is Spring Boot's own default, not a guess this makes.
+ * otherwise. There is no default port: when the project declares none, this
+ * returns `baseUrl: null` and `port: null` so the form can leave the field
+ * empty and ask. Spring's 8080 is a convention about a framework, not a fact
+ * about this checkout, and a silently assumed one points the cases at whatever
+ * else on the machine happens to hold it.
  */
 const RESOURCE_DIR = join('src', 'main', 'resources')
 const CONFIG_FILES = ['application.yml', 'application.yaml', 'application.properties']
@@ -569,11 +573,25 @@ export async function guessBaseUrl(projectPath) {
   try {
     const info = await stat(projectPath)
     if (!info.isDirectory()) {
-      return { baseUrl: null, port: null, contextPath: '', source: null, warnings: [`${projectPath} is not a directory`] }
+      return {
+        baseUrl: null,
+        port: null,
+        contextPath: '',
+        scheme: 'http',
+        source: null,
+        warnings: [`${projectPath} is not a directory`],
+      }
     }
     root = projectPath
   } catch (error) {
-    return { baseUrl: null, port: null, contextPath: '', source: null, warnings: [`cannot read ${projectPath}: ${error.message}`] }
+    return {
+      baseUrl: null,
+      port: null,
+      contextPath: '',
+      scheme: 'http',
+      source: null,
+      warnings: [`cannot read ${projectPath}: ${error.message}`],
+    }
   }
 
   // Resource paths are reported with forward slashes so the value is stable
@@ -588,6 +606,7 @@ export async function guessBaseUrl(projectPath) {
       baseUrl: null,
       port: null,
       contextPath: '',
+      scheme: 'http',
       source: null,
       warnings: [`no ${resourceDirName} under ${projectPath}, so the port cannot be read from the project`],
     }
@@ -660,15 +679,18 @@ export async function guessBaseUrl(projectPath) {
     if (port !== null && contextPath && ssl) break
   }
 
+  const scheme = ssl ? 'https' : 'http'
   if (port === null) {
-    warnings.push(`no server.port found under ${resourceDirName}; Spring Boot's default 8080 was assumed`)
-    port = 8080
+    // No 8080 fallback: the default belongs to Spring, not to this project, and
+    // a project that inherits it silently is a project whose cases talk to
+    // whatever else happens to hold that port. The reader types the number.
+    warnings.push(`no server.port found under ${resourceDirName}; the port is not filled in and has to be typed`)
+    return { baseUrl: null, port: null, contextPath: contextPath || '', scheme, source, warnings }
   }
 
-  const scheme = ssl ? 'https' : 'http'
   const path = contextPath.replace(/^\/*/, '').replace(/\/*$/, '')
   const baseUrl = `${scheme}://127.0.0.1:${port}${path ? `/${path}` : ''}`
-  return { baseUrl, port, contextPath: contextPath || '', source, warnings }
+  return { baseUrl, port, contextPath: contextPath || '', scheme, source, warnings }
 }
 
 /** Strips `#` and `!` comments from a .properties body, keeping line structure. */
