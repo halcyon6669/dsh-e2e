@@ -56,7 +56,6 @@ window.__ModuleLoader__.load({
 
         'label.editor': 'Case file',
         'label.run': 'Run',
-        'label.reports': 'Recent runs',
         'label.databases': 'Databases you can name',
         'label.targets': 'Targets',
         'label.registry': 'Registry',
@@ -102,7 +101,6 @@ window.__ModuleLoader__.load({
         'empty.noCaseDir': 'No case directory is configured, so there is nothing to list. Set config.caseDir in the plugin settings to a folder of .yaml cases.',
         'empty.noCases': 'No case files in this folder yet. Create one, or generate one from a description.',
         'empty.selectCase': 'Pick a case on the left, or create one.',
-        'empty.noReports': 'No runs yet. The report of every run lands here, with the evidence.',
         'empty.noChecks': 'This run recorded no assertions.',
 
         'notice.saved': 'Saved {file}.',
@@ -250,7 +248,6 @@ window.__ModuleLoader__.load({
         'action.create': 'Create',
         'action.creating': 'Creating…',
         'notice.projectCreated': 'Project {name} created. Base URL {baseUrl} was read from the project; cases live in {dir}.',
-        'field.projectName': 'Project name (letters, digits, dashes)',
         'field.projectPath': 'Project path (required — the Base URL is read from its application.yml)',
         'action.browse': 'Browse…',
         'notice.pickerUnavailable': 'This window has no system file manager, so type the project path instead.',
@@ -312,7 +309,6 @@ window.__ModuleLoader__.load({
         'action.loading': '加载中…',
         'label.editor': '用例文件',
         'label.run': '运行',
-        'label.reports': '最近运行',
         'label.databases': '可以引用的数据库',
         'label.targets': '目标',
         'label.registry': '注册表',
@@ -358,7 +354,6 @@ window.__ModuleLoader__.load({
         'empty.noCaseDir': '还没有配置用例目录，所以这里没有可列出的东西。把插件设置里的 config.caseDir 指向存放 .yaml 用例的文件夹。',
         'empty.noCases': '这个文件夹里还没有用例。新建一个，或者根据描述生成一个。',
         'empty.selectCase': '在左边选一个用例，或者新建一个。',
-        'empty.noReports': '还没有运行记录。每次运行的报告都会落在这里，带证据。',
         'empty.noChecks': '这次运行没有记录断言。',
 
         'notice.saved': '已保存 {file}。',
@@ -503,7 +498,6 @@ window.__ModuleLoader__.load({
         'action.create': '创建',
         'action.creating': '创建中…',
         'notice.projectCreated': '项目 {name} 已创建。Base URL（{baseUrl}）是从项目里读出来的；用例放在 {dir}。',
-        'field.projectName': '项目名（字母、数字、短横线）',
         'field.projectPath': '项目路径（必填 — Base URL 会从它的 application.yml 读取）',
         'action.browse': '浏览…',
         'notice.pickerUnavailable': '这个窗口没有系统文件管理器，请直接输入项目路径。',
@@ -2459,8 +2453,9 @@ window.__ModuleLoader__.load({
       const [keepRunning, setKeepRunning] = React.useState(false)
       const [explaining, setExplaining] = React.useState(false)
       const [creating, setCreating] = React.useState(null) // 'project' on the landing page, a draft file name inside one
-      // The create-project form's draft. Reset whenever the form closes.
-      const [projectDraft, setProjectDraft] = React.useState({ name: '', projectPath: '' })
+      // The create-project form's draft. Reset whenever the form closes. Only
+      // the path: the project's name is the folder's name, and the Host says so.
+      const [projectDraft, setProjectDraft] = React.useState({ projectPath: '' })
       // True while the system folder dialog is open, so a second click on the
       // path cannot stack a second dialog on top of the first.
       const [pickingFolder, setPickingFolder] = React.useState(false)
@@ -2948,16 +2943,16 @@ window.__ModuleLoader__.load({
       }
 
       // Creating a project writes the registry and makes a case directory on the
-      // Host; the panel then refreshes so the new card is on the table. The name
-      // the reader typed becomes the target name cases write in `env.target`,
-      // which is why it is validated there and echoed here.
+      // Host; the panel then refreshes so the new card is on the table. The write
+      // side names the target after the folder, and echoes that name back — it is
+      // the name cases write in `env.target`, so the notice shows it.
       const createProject = async () => {
         setBusy('create')
         try {
           const result = await apiPost('/project', projectDraft)
           setNotice({ message: t('notice.projectCreated', { name: result.name, baseUrl: result.baseUrl, dir: result.caseDir }) })
           setCreating(null)
-          setProjectDraft({ name: '', projectPath: '' })
+          setProjectDraft({ projectPath: '' })
           await refresh()
         } catch (error) {
           setNotice({ isError: true, message: error.message })
@@ -3039,7 +3034,6 @@ window.__ModuleLoader__.load({
       const caseDirs = (data && data.caseDirs) || []
       const listing = (data && data.cases) || []
       const registry = (data && data.registry) || { targets: [], databases: [], error: null }
-      const reports = (data && data.reports && data.reports.reports) || []
       const projectData = boot.projects || { projects: [], creator: null, warnings: [] }
       const projects = projectData.projects || []
       // Re-read the open project from the fresh list on every render. Holding the
@@ -3082,6 +3076,13 @@ window.__ModuleLoader__.load({
           originLabel ? h('span', { className: 'e2e-topnav-chip', title: originLabel }, t('label.origin'), ': ', originLabel) : null,
           targetName ? h('span', { className: 'e2e-topnav-chip' }, t('label.env'), ': ', targetName) : null,
           h('div', { className: 'e2e-spacer' }),
+          // The way out of a project sits where every other page-level action
+          // sits, in the bar at the top, rather than in a breadcrumb a reader has
+          // to notice. A project is a place you can be lost in; leaving it should
+          // not need hunting.
+          project
+            ? h(Btn, { key: 'back', small: true, onClick: () => setOpenProject(null) }, t('action.backToProjects'))
+            : null,
           h(Btn, { small: true, onClick: refresh }, t('action.refresh')),
           !project
             ? h(
@@ -3176,26 +3177,20 @@ window.__ModuleLoader__.load({
               h('span', { className: 'e2e-topnav-suite' }, t('label.suite'), ': ', project.name),
             )
           : null,
-        // The breadcrumbs carry the way back and the way between views, and the
-        // "new case" button. They only exist once a project is open; the landing
-        // page replaces them with the create-project form instead.
+        // The breadcrumb says where in the project you are, and carries the "new
+        // case" button. The way back out is the top bar's button, not a second
+        // copy of it here — one control per intention.
         project
           ? h(
               'div',
               { className: 'e2e-crumbs' },
-              h(
-                'button',
-                { type: 'button', className: 'e2e-crumb', onClick: () => setOpenProject(null) },
-                t('action.backToProjects'),
-              ),
-              h('span', { className: 'e2e-crumb-sep' }, '/'),
-              view !== 'cases'
-                ? h(
+              view === 'cases'
+                ? h('span', { className: 'e2e-crumb-current' }, project.name)
+                : h(
                     'button',
                     { type: 'button', className: 'e2e-crumb', onClick: () => setView('cases') },
                     project.name,
-                  )
-                : h('span', { className: 'e2e-crumb-current' }, project.name),
+                  ),
               view === 'plan'
                 ? h(
                     'span',
@@ -3242,16 +3237,9 @@ window.__ModuleLoader__.load({
           ? h(
               'div',
               { className: 'e2e-crumbs e2e-project-create' },
-              h('input', {
-                className: 'e2e-input e2e-project-field',
-                placeholder: t('field.projectName'),
-                value: projectDraft.name,
-                onChange: (event) => setProjectDraft({ ...projectDraft, name: event.target.value }),
-              }),
-              // A click on the path is a request for the file manager: typing a
-              // long Windows path by hand is the thing this field exists to
-              // avoid. The system dialog decides what a folder is; the field
-              // still takes typed input for paths no dialog is needed for.
+              // The path is the whole form. A project's name is the name of the
+              // folder it lives in — asking for it again would be asking the
+              // reader to name the same thing twice, and the Host derives it.
               h('input', {
                 className: 'e2e-input e2e-project-field is-wide',
                 placeholder: t('field.projectPath'),
@@ -3264,7 +3252,7 @@ window.__ModuleLoader__.load({
               h(Btn, { small: true, onClick: () => setCreating('') }, t('action.cancel')),
               h(
                 Btn,
-                { small: true, primary: true, disabled: busy === 'create' || !projectDraft.name.trim() || !projectDraft.projectPath.trim(), onClick: createProject },
+                { small: true, primary: true, disabled: busy === 'create' || !projectDraft.projectPath.trim(), onClick: createProject },
                 busy === 'create' ? t('action.creating') : t('action.create'),
               ),
             )
@@ -3366,49 +3354,25 @@ window.__ModuleLoader__.load({
         h(RunSurface, { t, run, onExplain: explain, explaining, onOpenReport: openReport }),
       )
 
-      const reportsPanel = h(
-        Section,
-        { title: t('label.reports') },
-        reports.length === 0
-          ? h('div', { className: 'e2e-empty' }, t('empty.noReports'))
-          : h(
+      // The run history used to live here as a standing list of every report on
+      // disk. It grew into the loudest thing on a page about cases, and the case
+      // page already carries each case's own history. What is left is the reader
+      // for a report someone asked to see — a run surface or a case rail opens
+      // one, and this is where it lands.
+      const reportViewer = reportText
+        ? h(
+            'div',
+            { className: 'e2e-report-view' },
+            h(
               'div',
-              { className: 'e2e-reports' },
-              reports.slice(0, 25).map((item) =>
-                h(
-                  'button',
-                  {
-                    key: item.path,
-                    type: 'button',
-                    className: 'e2e-report',
-                    onClick: () => openReport(item.markdownPath || item.path),
-                  },
-                  h(Chip, { tone: verdictTone(item.summary && item.summary.verdict) }, (item.summary && item.summary.verdict) || '?'),
-                  h('span', { className: 'e2e-report-id' }, (item.summary && item.summary.caseId) || item.name),
-                  h(
-                    'span',
-                    { className: 'e2e-muted' },
-                    item.summary && item.summary.durationMs ? `${item.summary.durationMs} ms` : '',
-                    item.summary && item.summary.failed ? ` · ${item.summary.failed} failed` : '',
-                  ),
-                ),
-              ),
+              { className: 'e2e-editor-bar' },
+              h('code', { className: 'e2e-file' }, reportText.path),
+              h('div', { className: 'e2e-spacer' }),
+              h(Btn, { small: true, onClick: () => setReportText(null) }, t('action.close')),
             ),
-        reportText
-          ? h(
-              'div',
-              { className: 'e2e-report-view' },
-              h(
-                'div',
-                { className: 'e2e-editor-bar' },
-                h('code', { className: 'e2e-file' }, reportText.path),
-                h('div', { className: 'e2e-spacer' }),
-                h(Btn, { small: true, onClick: () => setReportText(null) }, t('action.close')),
-              ),
-              h('pre', { className: 'e2e-pre is-tall' }, reportText.text),
-            )
-          : null,
-      )
+            h('pre', { className: 'e2e-pre is-tall' }, reportText.text),
+          )
+        : null
 
       // The two pages inside a project. The case list answers "what is red"; the
       // plan editor answers "what should this test say". They are separate pages
@@ -3495,7 +3459,7 @@ window.__ModuleLoader__.load({
           : null,
         runControls,
         registryPanel,
-        reportsPanel,
+        reportViewer,
       )
 
       // Reading a case and editing one are two pages, because they are two
@@ -3521,7 +3485,7 @@ window.__ModuleLoader__.load({
           onOpenReport: openReport,
         }),
         run ? h(RunSurface, { t, run, onExplain: explain, explaining: busy === 'explain', onOpenReport: openReport }) : null,
-        reportsPanel,
+        reportViewer,
       )
 
       const planPage = h(
@@ -4682,10 +4646,6 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-db-entry { margin-top: 6px; }
 .e2e-db-head { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
 
-.e2e-reports { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow: auto; }
-.e2e-report { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: inherit; text-align: left; padding: 4px 5px; border-radius: 6px; cursor: pointer; font-size: 12px; }
-.e2e-report:hover { background: var(--dsw-alias-bg-layer-2); }
-.e2e-report-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-report-view { margin-top: 8px; display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow: hidden; }
 
 .e2e-pre { margin: 4px 0 0; padding: 9px 11px; border-radius: 7px; background: var(--dsw-alias-bg-base); border: 1px solid var(--dsw-alias-border-l1); font-family: ui-monospace, monospace; font-size: 11.5px; line-height: 1.55; overflow: auto; max-height: 260px; white-space: pre-wrap; }

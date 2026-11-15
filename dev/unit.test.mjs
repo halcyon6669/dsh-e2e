@@ -1274,6 +1274,35 @@ await testAsync('a name with spaces is slugged, because the slug is the target n
   assert.match(registry, /  my-shop:\n/, 'the slug, not the display name, lands in the registry')
 })
 
+await testAsync('a folder alone is enough: the name and the Base URL come from it', async () => {
+  // The form asks for one thing. The project's name is the folder's name, and
+  // the port is in the project's own application.yml — so a path is the whole
+  // input, and anything else would be asking the reader to repeat it.
+  const projectPath = join(tmpDir, 'My Store')
+  await mkdir(join(projectPath, 'src', 'main', 'resources'), { recursive: true })
+  await writeFile(join(projectPath, 'src', 'main', 'resources', 'application.yml'), 'server:\n  port: 9448\n', 'utf8')
+  const result = await projectPanel.createProject({ projectPath })
+  assert.equal(result.name, 'my-store', 'the folder name is the project name, slugged for the registry')
+  assert.equal(result.baseUrl, 'http://127.0.0.1:9448', 'the port came from the project\'s application.yml')
+  assert.match(String(result.derivedFrom), /application\.yml$/, 'the panel can say where the URL came from')
+  const registry = await readFile(result.registryFile, 'utf8')
+  assert.match(registry, /  my-store:\n    baseUrl: http:\/\/127\.0\.0\.1:9448\n/, 'the target is written')
+  assert.match(registry, /projectPath: .*My Store/, 'and it remembers the folder it was born from')
+})
+
+await testAsync('a folder with no server configuration says so instead of inventing a URL', async () => {
+  const bare = join(tmpDir, 'bare-app')
+  await mkdir(bare, { recursive: true })
+  await assert.rejects(
+    () => projectPanel.createProject({ projectPath: bare }),
+    (error) => {
+      assert.ok(error instanceof PanelError)
+      assert.match(error.message, /could not derive a Base URL/)
+      return true
+    },
+  )
+})
+
 await testAsync('a fresh registry file gets a header that explains the conventions', async () => {
   const freshRoot = join(tmpDir, 'project-fresh')
   await mkdir(freshRoot, { recursive: true })

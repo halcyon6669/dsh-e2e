@@ -530,11 +530,11 @@ await test('the landing page offers to create a project, and the form appears in
   const inputs = elementsOf(opened).filter(
     (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'),
   )
-  // The form asks for a name and a path only: the Base URL is read from the
-  // project's application.yml, and the run configuration / remote-host fields
-  // were removed — local e2e runs need neither.
-  assert.ok(inputs.length >= 2, `expected the name and the project path fields, found ${inputs.length}`)
-  assert.equal(inputs.length, 2, `expected exactly the name and the project path fields, found ${inputs.length}`)
+  // The form asks for the folder and nothing else: the Base URL is read from the
+  // project's application.yml, the project's name is the folder's name, and the
+  // run configuration / remote-host fields were removed — local e2e needs neither.
+  assert.ok(inputs.length >= 1, `expected the project path field, found ${inputs.length}`)
+  assert.equal(inputs.length, 1, `expected only the project path field, found ${inputs.length}`)
   // A placeholder is a prop, not text content: assert on it where it lives.
   const pathField = inputs.find((node) => /Project path \(required/.test(String(node.props.placeholder || '')))
   assert.ok(pathField, 'the path field says the Base URL is derived')
@@ -559,7 +559,7 @@ await test('the landing page offers to create a project, and the form appears in
   pathField.props.onClick()
   const chosen = await settle(() => mainComponent({}))
   const pathValue = (tree) =>
-    elementsOf(tree).filter((node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'))[1].props.value
+    elementsOf(tree).filter((node) => node.props && String(node.props.className || '').split(' ').includes('e2e-input'))[0].props.value
   assert.equal(pathValue(chosen), 'C:\\work', 'the folder the dialog returned becomes the project path')
   // The button beside the field does the same thing, for anyone looking for one.
   const browse = elementsOf(opened).find(
@@ -644,6 +644,33 @@ await test('clicking a project row opens that project', async () => {
   assert.match(text, /Record/, 'the open project is named in the header')
   assert.match(text, /REG-001/, 'its cases are listed')
   assert.match(text, /REG-002/)
+})
+
+await test('the top bar is where you leave a project, and it really leaves', async () => {
+  const opened = await settle(() => mainComponent({}))
+  const back = elementsOf(opened).find(
+    (node) =>
+      node.props &&
+      typeof node.props.className === 'string' &&
+      /\be2e-btn\b/.test(node.props.className) &&
+      /All projects/.test(textOf(node)),
+  )
+  assert.ok(back, 'the top bar should carry the way back to all projects')
+  assert.equal(typeof back.props.onClick, 'function', 'a button that cannot be pressed is a label')
+  back.props.onClick()
+  const landingAgain = await settle(() => mainComponent({}))
+  const cards = elementsOf(landingAgain).filter((node) => node.props && node.props.className === 'e2e-project-card')
+  assert.ok(cards.length > 0, 'the project table comes back')
+  // The breadcrumb row is project-only, so it is the cleanest proof the project closed.
+  assert.equal(
+    elementsOf(landingAgain).filter((node) => node.props && node.props.className === 'e2e-crumbs').length,
+    0,
+    'the breadcrumb row belongs to the project and should be gone',
+  )
+  // ...and back into the same project, so the tests after this one still have
+  // it open. The card object from the first render is the same row.
+  row.props.onClick()
+  await settle(() => mainComponent({}))
 })
 
 await test('the case list shows only the open project’s cases', async () => {

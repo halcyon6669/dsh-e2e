@@ -713,8 +713,11 @@ export function createPanel({ ctx, config = {}, state }) {
    * case cannot be born.
    */
   async function createProject(input = {}) {
-    const name = String(input.name || '').trim()
     const projectPath = String(input.projectPath || '').trim()
+    // The form asks for a folder and nothing else: a project's name is the name
+    // of the folder it lives in, which the reader already chose. A name passed
+    // explicitly still wins — the tools and tests use that door.
+    const name = String(input.name || '').trim() || (projectPath ? basename(projectPath) : '')
     let baseUrl = String(input.baseUrl || '').trim()
     let derived = null
     if (!baseUrl) {
@@ -762,7 +765,7 @@ export function createPanel({ ctx, config = {}, state }) {
       name: slug,
       baseUrl,
       configurationName: input.configurationName,
-      projectPath: input.projectPath,
+      projectPath: projectPath || undefined,
       targetCaseDir: caseDir,
       insecureTls: input.insecureTls === true,
       config,
