@@ -1347,9 +1347,11 @@ await testAsync('the yaml wins over the field, and the field stays empty when th
 
   const declared = join(tmpDir, 'declared-app')
   await mkdir(join(declared, 'src', 'main', 'resources'), { recursive: true })
-  await writeFile(join(declared, 'src', 'main', 'resources', 'application.yml'), 'server:\n  port: 9455\n')
+  // Written with \r\n on purpose: a checkout checked out on Windows carries
+  // them on every line, and an anchored pattern without \r? rejects all of them.
+  await writeFile(join(declared, 'src', 'main', 'resources', 'application.yml'), 'spring:\r\n  application:\r\n    name: declared\r\nserver:\r\n  port: 9455\r\n')
   const loud = await projectPanel.deriveProject({ projectPath: declared })
-  assert.equal(loud.port, 9455)
+  assert.equal(loud.port, 9455, 'a Windows line ending does not hide the port')
   assert.equal(loud.baseUrl, 'http://127.0.0.1:9455')
 })
 

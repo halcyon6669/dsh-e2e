@@ -724,6 +724,10 @@ function propertyValue(clean, keys) {
  * the right tool for reading two scalars; full parsing is not the goal.
  */
 async function yamlValue(text, keys, file) {
+  // Files written on Windows carry a `\r` before the `\n`, and an anchored
+  // pattern without `\r?` rejects every line that has one — the whole file is
+  // then "no match" and the port is reported missing on a checkout Spring
+  // itself runs fine.
   const lines = text.split('\n')
   let index = 0
 
@@ -731,7 +735,7 @@ async function yamlValue(text, keys, file) {
     if (remaining.length === 0) return undefined
     const key = remaining[0]
     const prefix = '  '.repeat(depth)
-    const pattern = new RegExp(`^${prefix}([A-Za-z0-9_.-]+):(?:[ \\t]+(.*))?$`)
+    const pattern = new RegExp(`^${prefix}([A-Za-z0-9_.-]+):(?:[ \\t]+(.*))?\r?$`)
     while (index < lines.length) {
       const line = lines[index]
       index += 1
