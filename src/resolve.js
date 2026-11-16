@@ -67,6 +67,13 @@ export async function resolveEnvironment(definition, options = {}) {
   }
 
   if (target.insecureTls !== true) target.insecureTls = definition.env.insecureTls === true
+  if (target.baseUrl.startsWith('https://127.0.0.1') || target.baseUrl.startsWith('https://localhost')) {
+    // A loopback https service is a developer's own keystore, not a CA the
+    // machine trusts; refusing the certificate here would make every local
+    // https case fail on a fact the reader already knows when they start the
+    // service themselves.
+    target.insecureTls = true
+  }
   if (!target.baseUrl) {
     throw new ResolveError(
       `case "${definition.id}" has no base URL: set env.baseUrl, or name a target with "target:" and define its baseUrl in the registry` +
