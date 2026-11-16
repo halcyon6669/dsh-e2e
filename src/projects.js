@@ -326,6 +326,11 @@ export async function listProjects(options = {}) {
       entry.lastRunAt = run ? run.startedAt : null
       entry.reportPath = run ? run.markdownPath : null
       entry.durationMs = run ? run.durationMs : null
+      // The check totals are what the diagnosis column shows next to the
+      // duration. The report reader already counted them; without these two
+      // lines the row said "0 checks" for a case that asserted five things.
+      entry.checks = run ? run.checks : 0
+      entry.failed = run ? run.failed : 0
       // One word for the row's status chip, decided here rather than in the
       // browser: "blocked" and "failed" are different problems, and a page that
       // derives that distinction a second time will eventually derive it

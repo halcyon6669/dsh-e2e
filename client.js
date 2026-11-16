@@ -1052,7 +1052,17 @@ window.__ModuleLoader__.load({
                         if (groupAllChecked === Boolean(checked[entry.file])) onToggleChecked(entry.file)
                       }),
                   }),
-                  h('span', { className: 'e2e-chevron', 'aria-hidden': 'true' }, isFolded ? '▸' : '▾'),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'e2e-chevron e2e-group-fold',
+                      title: isFolded ? t('action.expandGroup') : t('action.foldGroup'),
+                      'aria-expanded': isFolded ? 'false' : 'true',
+                      onClick: () => toggle(bucket.name),
+                    },
+                    isFolded ? '▸' : '▾',
+                  ),
                   h('span', { className: 'e2e-plan-group-name', title: t('label.group') }, bucket.name),
                   groupEndpoint(bucket).map((endpoint) => h('code', { key: endpoint, className: 'e2e-endpoint-tag' }, endpoint)),
                   h('span', { className: 'e2e-muted' }, `[${t('label.tests', { count: bucket.summary.counts.total })}]`),
@@ -1067,17 +1077,6 @@ window.__ModuleLoader__.load({
                     bucket.summary.counts.error > 0
                       ? h('span', { className: 'e2e-group-balance-error', title: t('label.errorScenarios') }, ` · ${bucket.summary.counts.error}✗`)
                       : null,
-                  ),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'e2e-chevron e2e-group-fold',
-                      title: isFolded ? t('action.expandGroup') : t('action.foldGroup'),
-                      'aria-expanded': isFolded ? 'false' : 'true',
-                      onClick: () => toggle(bucket.name),
-                    },
-                    isFolded ? '▸' : '▾',
                   ),
                 ),
                 isFolded
@@ -4780,10 +4779,15 @@ window.__ModuleLoader__.load({
 .e2e-endpoint-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-chevron {
-  width: 12px;
+  width: 22px;
+  flex: 0 0 22px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 10px;
+  font-size: 18px;
   line-height: 1;
+  text-align: center;
+  background: none;
+  border: 0;
+  padding: 0;
 }
 .e2e-plan-group-name { font-weight: 600; color: var(--dsw-alias-label-primary); }
 

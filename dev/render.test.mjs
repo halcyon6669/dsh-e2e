@@ -925,6 +925,19 @@ await test('a group folds, and stays folded across a refresh', async () => {
   assert.ok(fold, 'expected the fold control on the group header')
   assert.equal(fold.type, 'button', 'folding is an action, so it has a button')
   assert.equal(fold.props['aria-expanded'], 'true', 'a group starts open')
+  assert.equal(
+    elementsOf(listed).filter(
+      (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-group-fold'),
+    ).length,
+    1,
+    'there is exactly one fold control, at the front of the group',
+  )
+  // The front chevron is the control: it must come before the group name.
+  const head = elementsOf(listed).find((node) => node.props && node.props.className === 'e2e-plan-group-head')
+  const kids = head ? (Array.isArray(head.props.children) ? head.props.children : [head.props.children]) : []
+  const foldAt = kids.findIndex((node) => node && node.props && String(node.props.className || '').includes('e2e-group-fold'))
+  const nameAt = kids.findIndex((node) => node && node.props && String(node.props.className || '').includes('e2e-plan-group-name'))
+  assert.ok(foldAt >= 0 && nameAt > foldAt, 'the fold control sits before the group name')
 
   fold.props.onClick()
   const folded = await settle(() => mainComponent({}))

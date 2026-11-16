@@ -113,9 +113,16 @@ await test('latest results come from the newest report per case', () => {
   const shop = byName.get('shop')
   const passedCase = shop.cases.find((entry) => entry.caseId === 'LIST-USERS-001')
   assert.equal(passedCase.verdict, 'passed')
+  // The diagnosis column reads these flat totals off the case, not off a
+  // nested run object. A case that asserted one thing must say "1 checks".
+  assert.equal(passedCase.checks, 1)
+  assert.equal(passedCase.failed, 0)
   const other = byName.get('other')
   assert.equal(other.counts.failed, 1)
   assert.equal(other.counts.passed, 0)
+  const failedCase = other.cases.find((entry) => entry.caseId === 'LIST-ORDERS-001')
+  assert.equal(failedCase.checks, 1)
+  assert.equal(failedCase.failed, 1)
 })
 
 await test('a project is only green when every case passed', () => {
