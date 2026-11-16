@@ -131,6 +131,8 @@ window.__ModuleLoader__.load({
         'notice.saved': 'Saved {file}.',
         'notice.savedAssigned': 'Saved {file} with case id {caseId}.',
         'notice.deleted': 'Deleted {file}.',
+        'notice.casesDeleted': 'Deleted {count} case(s).',
+        'notice.casesPartlyDeleted': '{done} deleted, {failed} failed: {errors}',
         'notice.validated': 'The case loads and the guard would allow it.',
         'notice.generated': 'Generated with {model}. Read it before you run it.',
         'notice.runStarted': 'Run started — the service is starting.',
@@ -230,6 +232,7 @@ window.__ModuleLoader__.load({
         'label.noRequest': 'This run never got a request out, so there is no wire trace to show.',
         'label.payload': 'Payload',
         'label.bodyResponse': 'Body response',
+        'label.keyLogLines': 'Showing {shown} key line(s) — framework startup and pool chatter are hidden',
         'label.lines': 'lines',
         'label.teardown': 'Teardown',
         'label.errors': 'error(s)',
@@ -419,6 +422,8 @@ window.__ModuleLoader__.load({
         'notice.saved': '已保存 {file}。',
         'notice.savedAssigned': '已保存 {file}，用例编号 {caseId}。',
         'notice.deleted': '已删除 {file}。',
+        'notice.casesDeleted': '已删除 {count} 条用例。',
+        'notice.casesPartlyDeleted': '已删除 {done} 条，{failed} 条失败：{errors}',
         'notice.validated': '用例可以加载，护栏也会放行。',
         'notice.generated': '由 {model} 生成。运行前请先读一遍。',
         'notice.runStarted': '已开始运行 —— 服务正在启动。',
@@ -514,6 +519,7 @@ window.__ModuleLoader__.load({
         'label.noRequest': '这次运行没有发出请求，所以没有线网探测可看。',
         'label.payload': '请求体',
         'label.bodyResponse': '响应体',
+        'label.keyLogLines': '只展示 {shown} 行关键日志 —— 框架启动和连接池的噪音已隐藏',
         'label.lines': '行',
         'label.teardown': '清理',
         'label.errors': '处错误',
@@ -921,7 +927,7 @@ window.__ModuleLoader__.load({
      * reader thinks in; the endpoint is still on the row, so the grouping never
      * hides the route.
      */
-    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onScan, onRunAll, running, checked, onToggleChecked, onRunSelected }) {
+    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onScan, onRunAll, running, checked, onToggleChecked, onRunSelected, onDeleteSelected, confirmDeleteSelected, deleting }) {
       const counts = project.statusCounts || { all: 0 }
       const tabs = ['all', 'planned', 'generated', 'running', 'passed', 'failed', 'blocked']
       const [folded, setFolded] = React.useState({})
@@ -1134,6 +1140,18 @@ window.__ModuleLoader__.load({
                 Btn,
                 { small: true, primary: true, disabled: running || selectedCount === 0, onClick: () => onRunSelected((project.cases || []).filter((entry) => checked[entry.file]).map((entry) => entry.file)) },
                 running ? t('action.running') : t('action.runSerial'),
+              ),
+              // Delete asks twice here too: these are the cases' own files, and
+              // there is no undo. The second press inside four seconds commits.
+              h(
+                Btn,
+                {
+                  small: true,
+                  variant: confirmDeleteSelected ? 'danger' : 'default',
+                  disabled: deleting || running || selectedCount === 0,
+                  onClick: () => onDeleteSelected && onDeleteSelected(),
+                },
+                confirmDeleteSelected ? t('action.deleteConfirm') : t('action.deleteSelected', { count: selectedCount }),
               ),
             )
           : null,
@@ -1528,6 +1546,34 @@ window.__ModuleLoader__.load({
       return match ? ` is-${match[1].toLowerCase()}` : ''
     }
 
+    // A request's console window is mostly container chatter: Spring mapping
+    // tables, Hikari pools starting, the same trace marker printed on every
+    // line. The useful part — the mapper's SQL, the repository's own messages,
+    // every WARN/ERROR — is a few lines among hundreds. Show those, once each.
+    const LOG_NOISE =
+      /\bo\.s\.|\bcom\.zaxxer\.|\bo\.a\.c\.c\.|\borg\.mybatis\.spring\.|DispatcherServlet|HikariConfig|HikariPool|PoolBase|DataSourceTransactionManager|InitializingBean|Finished Spring|Started \S+Application|Tomcat started|^\s*$/
+    function keyLogLines(lines) {
+      const kept = []
+      const seen = new Set()
+      for (const raw of lines || []) {
+        const line = String(raw).replace(/\s+$/, '')
+        if (!line || LOG_NOISE.test(line)) continue
+        const level = /\b(WARN|ERROR|FATAL)\b/.exec(line)
+        const app = /\bc\.h\.a\.|com\.huawei\.|\bPLAIN:/.test(line)
+        if (!level && !app && !/\bINFO\b/.test(line)) continue
+        // Normalise the volatile bits — leading timestamp and long hex ids — so
+        // the same marker printed on every line collapses into one entry.
+        const fingerprint = line
+          .replace(/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d[.,]\d+/, '')
+          .replace(/\b[0-9a-fA-F]{16,}\b/g, '#')
+        if (seen.has(fingerprint)) continue
+        seen.add(fingerprint)
+        kept.push(line)
+        if (kept.length >= 60) break
+      }
+      return kept
+    }
+
     /**
      * What went out and what came back, always on the page.
      *
@@ -1610,7 +1656,7 @@ window.__ModuleLoader__.load({
     function LogTail(props) {
       const { t, logs } = props
       if (!logs) return h('div', { className: 'e2e-muted' }, t('label.noLogs'))
-      const lines = (logs.lines || []).slice(-14)
+      const lines = keyLogLines(logs.lines).slice(-14)
       return h(
         'div',
         null,
@@ -1711,6 +1757,7 @@ window.__ModuleLoader__.load({
       const shown = historyRun || null
       const report = (shown && shown.report) || null
       const evidence = (report && report.evidence) || null
+      const keyLogs = evidence && evidence.logs ? keyLogLines(evidence.logs.lines) : []
       const checks = (report && report.checks) || []
       const steps = (report && report.steps) || []
       const verdict = (report && report.verdict) || (latest ? latest.verdict : null)
@@ -1927,8 +1974,13 @@ window.__ModuleLoader__.load({
                       ? h('div', { className: 'e2e-muted' }, t('label.logsAtTeardown'))
                       : null,
                     evidence.logs.traceIdPresent ? null : h('div', { className: 'e2e-warning' }, t('label.logsUnscoped')),
-                    (evidence.logs.lines || []).length > 0
-                      ? h('pre', { className: 'e2e-pre is-tall' }, formatBody((evidence.logs.lines || []).join('\n')))
+                    keyLogs.length > 0
+                      ? h(
+                          'div',
+                          null,
+                          h('div', { className: 'e2e-muted' }, t('label.keyLogLines', { shown: keyLogs.length })),
+                          h('pre', { className: 'e2e-pre is-tall' }, formatBody(keyLogs.join('\n'))),
+                        )
                       : h('div', { className: 'e2e-muted' }, t('label.logsEmpty')),
                   )
                 : h(
@@ -2334,7 +2386,7 @@ window.__ModuleLoader__.load({
                   { className: 'e2e-muted' },
                   `${evidence.logs.traceId} · ${evidence.logs.scopedLines}/${evidence.logs.totalLines}`,
                 ),
-                h('pre', { className: 'e2e-pre is-tall' }, formatBody((evidence.logs.lines || []).join('\n'))),
+                h('pre', { className: 'e2e-pre is-tall' }, formatBody(keyLogLines(evidence.logs.lines).join('\n'))),
               )
             : null,
           evidence.database && evidence.database.length > 0
@@ -3094,6 +3146,44 @@ window.__ModuleLoader__.load({
         } finally {
           setBusy(null)
         }
+      }
+
+      // The case list has its own selection — a case is a file someone wrote,
+      // and deleting several at once needs the same two-press guard as a single
+      // file. The confirm lives here so it survives a re-render of the table.
+      const [confirmDeleteChecked, setConfirmDeleteChecked] = React.useState(false)
+      React.useEffect(() => {
+        if (!confirmDeleteChecked) return undefined
+        const timer = setTimeout(() => setConfirmDeleteChecked(false), 4000)
+        return () => clearTimeout(timer)
+      }, [confirmDeleteChecked])
+      const armDeleteChecked = () => {
+        if (!selectedFiles.length || busy !== null) return
+        if (confirmDeleteChecked) {
+          setConfirmDeleteChecked(false)
+          removeChecked()
+        } else setConfirmDeleteChecked(true)
+      }
+      const removeChecked = async () => {
+        const files = selectedFiles
+        if (!files.length) return
+        setBusy('delete-cases')
+        const errors = []
+        let done = 0
+        for (const file of files) {
+          try {
+            await apiDelete(`/case?file=${q(file)}`)
+            done += 1
+          } catch (error) {
+            errors.push(`${file}: ${error.message}`)
+          }
+        }
+        setBusy(null)
+        setConfirmDeleteChecked(false)
+        if (errors.length === 0) setNotice({ message: t('notice.casesDeleted', { count: done }) })
+        else setNotice({ isError: true, message: t('notice.casesPartlyDeleted', { done, failed: errors.length, errors: errors.join('; ') }) })
+        clearChecked()
+        await refresh()
       }
 
       const explain = async () => {
@@ -4002,6 +4092,9 @@ window.__ModuleLoader__.load({
           checked,
           onToggleChecked: toggleChecked,
           onRunSelected: (files) => runAll(files && files.length ? files : selectedFiles),
+          onDeleteSelected: armDeleteChecked,
+          confirmDeleteSelected: confirmDeleteChecked,
+          deleting: busy === 'delete-cases',
         }),
         // "Add more tests" opens the two ways a case arrives without being typed:
         // described to the model, or read out of the source. Both are drafts that
@@ -4567,6 +4660,8 @@ window.__ModuleLoader__.load({
   gap: 10px;
   padding: 7px 10px;
   text-align: left;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .e2e-cases-head {
   font-size: 11px;
@@ -4625,7 +4720,7 @@ window.__ModuleLoader__.load({
   justify-content: center;
 }
 .e2e-icon-btn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
-.e2e-group-balance { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11px; }
+.e2e-group-balance { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11px; flex: 0 0 auto; white-space: nowrap; }
 .e2e-group-balance-pass { color: var(--dsw-alias-state-success-primary); }
 .e2e-group-balance-fail { color: var(--dsw-alias-state-error-primary); }
 .e2e-group-balance-error { color: var(--dsw-alias-state-warn-primary); }
@@ -4666,9 +4761,13 @@ window.__ModuleLoader__.load({
   border-radius: 8px;
   text-align: left;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   font-family: inherit;
   cursor: pointer;
 }
+.e2e-plan-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.e2e-endpoint-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-chevron {
   width: 12px;

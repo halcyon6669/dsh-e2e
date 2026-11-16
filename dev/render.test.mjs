@@ -953,6 +953,65 @@ await test('a group folds, and stays folded across a refresh', async () => {
   )
 })
 
+await test('the case list can delete what it has ticked, and asks twice', async () => {
+  const before = requested.length
+  // The group header's "select all" checkbox shares the class with the rows;
+  // only the row ones are titled "Select this case".
+  const checkboxes = elementsOf(listed).filter(
+    (node) => node.props && node.props.className === 'e2e-case-check' && node.props.title === 'Select this case',
+  )
+  assert.ok(checkboxes.length > 0, 'the case rows carry selection checkboxes')
+  checkboxes[0].props.onChange()
+  const picked = await settle(() => mainComponent({}))
+  const arm = elementsOf(picked).find(
+    (node) =>
+      node.props &&
+      typeof node.props.className === 'string' &&
+      /\be2e-btn\b/.test(node.props.className) &&
+      /Delete selected \(1\)/.test(textOf(node)),
+  )
+  assert.ok(arm, 'the serial bar offers to delete the one ticked case')
+  // First press arms; the file must still be on disk.
+  arm.props.onClick()
+  const armed = await settle(() => mainComponent({}))
+  assert.match(textOf(armed), /Delete for real/, 'the first press asks for confirmation')
+  assert.equal(requested.length, before, 'no delete went out on the first press')
+  // Second press commits, and only then is the file deleted.
+  const commit = elementsOf(armed).find(
+    (node) =>
+      node.props &&
+      typeof node.props.className === 'string' &&
+      /\be2e-btn\b/.test(node.props.className) &&
+      /Delete for real/.test(textOf(node)),
+  )
+  assert.ok(commit, 'the armed button is pressable')
+  commit.props.onClick()
+  await settle(() => mainComponent({}))
+  const deletes = requested.slice(before).filter((path) => path.startsWith('/case?file='))
+  assert.ok(deletes.length >= 1, 'the second press deletes the ticked case file')
+  // Leave the selection clear for the tests that follow.
+  elementsOf(await settle(() => mainComponent({})))
+    .filter((node) => node.props && node.props.className === 'e2e-case-check' && node.props.title === 'Select this case')
+    .forEach((node, index) => {
+      if (index === 0) node.props.onChange()
+    })
+  await settle(() => mainComponent({}))
+})
+
+await test('the group balance and row grid stay inside the scroller', () => {
+  // A flex row that can overflow pushed the pass/fail balance past the right
+  // edge of the case list; the grid rows had no box-sizing either. Both need the
+  // width clamps in the bundle, not a screenshot that looks right on one screen.
+  // Anchor to line start: the folded-state rule also mentions the class and
+  // would otherwise win the match without the width clamps.
+  const groupHead = source.match(/^\.e2e-plan-group-head\s*\{[^}]*\}/m)
+  assert.ok(groupHead, 'the group head has a style block')
+  assert.match(groupHead[0], /min-width:\s*0/, 'the group head may shrink')
+  assert.match(groupHead[0], /box-sizing:\s*border-box/, 'its padding is inside its width')
+  assert.match(source, /\.e2e-group-balance\s*\{[^}]*white-space:\s*nowrap/, 'the balance never wraps away')
+  assert.match(source, /\.e2e-endpoint-tag\s*\{[^}]*text-overflow:\s*ellipsis/, 'long endpoints are clipped, not pushed out')
+})
+
 /* ---------- the case detail page ---------- */
 
 const caseRow = elementsOf(listed).find(
@@ -1050,6 +1109,63 @@ await test('the console tab shows the server output and says it was not asserted
   // verified that nothing alarming was logged.
   assert.match(text, /Kept for evidence, not asserted on/, 'it says what the log is worth')
   assert.doesNotMatch(text, /collected no logs/, 'and does not claim there are none')
+})
+
+await test('the console hides framework chatter and keeps the lines that matter', async () => {
+  // A real run's 300-line window is mostly DispatcherServlet and Hikari DEBUG.
+  // Showing all of it buried the two lines that explain what the service did.
+  pastReport = {
+    ...PAST_REPORT,
+    report: {
+      ...PAST_REPORT.report,
+      evidence: {
+        ...PAST_REPORT.report.evidence,
+        logs: {
+          path: 'C:\\run.log',
+          traceId: 'abc123',
+          traceIdPresent: true,
+          asserted: false,
+          totalLines: 9,
+          scopedLines: 0,
+          lines: [
+            'o.s.web.servlet.DispatcherServlet - Initializing Servlet',
+            'com.zaxxer.hikari.HikariConfig - HikariPool-1 - configuration',
+            'o.s.web.servlet.DispatcherServlet - Completed initialization',
+            'DEBUG c.h.a.i.j.d.p.c.m.C.update - ==>  Preparing: UPDATE codes',
+            'DEBUG c.h.a.i.j.d.p.c.m.C.update - <==    Updates: 1',
+            'WARN slow query',
+            'com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Close initiated',
+            'INFO started',
+            'o.s.web.servlet.DispatcherServlet - Initializing Servlet', // repeated noise, deduped
+          ],
+        },
+      },
+    },
+  }
+  try {
+    const opened = await openDetail()
+    const logsTab = elementsOf(opened).find(
+      (node) =>
+        node.props &&
+        String(node.props.className || '').split(' ').includes('e2e-mode-btn') &&
+        /Console/.test(textOf(node)),
+    )
+    assert.ok(logsTab, 'the detail page offers the console tab')
+    logsTab.props.onClick()
+    const text = textOf(await settle(() => mainComponent({})))
+    // The application's own lines survive.
+    assert.match(text, /Preparing: UPDATE codes/, 'the SQL the service ran')
+    assert.match(text, /Updates: 1/, 'the result of that SQL')
+    assert.match(text, /WARN slow query/, 'warnings are kept')
+    assert.match(text, /INFO started/, 'startup milestones are kept')
+    assert.match(text, /key line\(s\)/, 'the page says it is showing a filtered view')
+    // The framework noise is gone.
+    assert.doesNotMatch(text, /Initializing Servlet/, 'DispatcherServlet chatter is hidden')
+    assert.doesNotMatch(text, /HikariPool-1/, 'connection-pool chatter is hidden')
+  } finally {
+    pastReport = PAST_REPORT
+    await openDetail()
+  }
 })
 
 // A run that borrowed a service that was already up has no console of its own.
