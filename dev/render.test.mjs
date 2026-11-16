@@ -123,9 +123,13 @@ const CASE_ENTRY = (id, caseId, endpoint, scenario, status, group) => ({
   configuration: null,
   databases: [],
   verdict: status === 'failed' ? 'failed' : status === 'passed' ? 'passed' : null,
-  // The diagnosis column reads the run summary the Host matched to this case;
-  // without it a passed row would diagnose to an empty string.
-  run: status === 'passed' || status === 'failed' ? { summary: { checks: 5, durationMs: 1234, caseId, verdict: status } } : null,
+  // The Host (src/projects.js) FLATTENS the last report onto each case — it
+  // never sets `run`. A diagnosis that only reads `entry.run.summary` left
+  // every run row blank in production; keep the fixture honest so that
+  // regression can't come back.
+  ...(status === 'passed' || status === 'failed'
+    ? { lastRunAt: '2026-11-16T12:14:13.621Z', checks: 5, failed: status === 'failed' ? 2 : 0, durationMs: 1234 }
+    : {}),
 })
 
 const RECORD_CASES = [
@@ -891,9 +895,10 @@ await test('each row carries the four things the table promises', () => {
   assert.match(text, /REG-001/, 'the id')
   assert.match(text, /Passed/, 'the latest status')
   assert.match(text, /proves auth-register/, 'the test name')
-  // The fourth column is the diagnosis, which replaced the priority chip in the
-  // Stitch layout: a run summary answers "why" where a priority answered "rank".
-  assert.match(text, /checks · \d+ ms/, 'the diagnosis for a run case')
+  // The diagnosis is fed from the Host's FLAT last-run fields (verdict, checks,
+  // failed, durationMs). A case that has run must never show an empty cell here.
+  assert.match(text, /5 checks · 1234 ms/, 'the passed case reads checks and duration from its flat fields')
+  assert.match(text, /5 checks · 2 failed · 1234 ms/, 'the failed case says how many checks failed')
   assert.match(text, /steps/, 'the diagnosis for an unrun case')
 })
 
@@ -970,7 +975,7 @@ await test('the case list can delete what it has ticked, and asks twice', async 
       /\be2e-btn\b/.test(node.props.className) &&
       /Delete selected \(1\)/.test(textOf(node)),
   )
-  assert.ok(arm, 'the serial bar offers to delete the one ticked case')
+  assert.ok(arm, 'the selection footer offers to delete the one ticked case')
   // First press arms; the file must still be on disk.
   arm.props.onClick()
   const armed = await settle(() => mainComponent({}))
@@ -1010,6 +1015,19 @@ await test('the group balance and row grid stay inside the scroller', () => {
   assert.match(groupHead[0], /box-sizing:\s*border-box/, 'its padding is inside its width')
   assert.match(source, /\.e2e-group-balance\s*\{[^}]*white-space:\s*nowrap/, 'the balance never wraps away')
   assert.match(source, /\.e2e-endpoint-tag\s*\{[^}]*text-overflow:\s*ellipsis/, 'long endpoints are clipped, not pushed out')
+  // The open button owns four header tracks. Left in one 110px grid cell, its
+  // status and diagnosis columns rendered under the wrong headers and looked
+  // empty — the exact complaint that started this pass.
+  const openBtn = source.match(/\.e2e-case-open\s*\{[^}]*\}/)
+  assert.ok(openBtn, 'the open button has a style block')
+  assert.match(openBtn[0], /grid-column:\s*2\s*\/\s*6/, 'it spans the id/name/status/diagnosis columns')
+  // The bottom bar is a quiet selection footer, not a second run toolbar that
+  // would not even stick inside the split flex column.
+  const serialBar = source.match(/\.e2e-serial-bar\s*\{[^}]*\}/)
+  assert.ok(serialBar, 'the serial bar has a style block')
+  assert.equal(/position:\s*sticky/.test(serialBar[0]), false, 'it is not a no-op sticky bar')
+  const listBtns = elementsOf(listed).filter((node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')))
+  assert.equal(listBtns.some((node) => /Trigger serial run|串行/.test(textOf(node))), false, 'the footer does not repeat the run actions')
 })
 
 /* ---------- the case detail page ---------- */

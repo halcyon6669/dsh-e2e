@@ -298,17 +298,16 @@ window.__ModuleLoader__.load({
         'label.selectCase': 'Select this case',
         'label.selectAll': 'Select every case in this group',
         'label.selectedCases': '{count}/{total} selected',
-        'action.runSerial': 'Trigger serial run',
-        'label.serialReady': 'Serial batch ready',
-        'label.serialHint': 'One case at a time: the port and the database rows are never shared between two cases.',
         'label.passRate': 'Pass rate',
         'label.lastInspected': 'Last activity',
         'diag.passed': '{checks} checks · {duration} ms',
+        'diag.failed': '{checks} checks · {failed} failed · {duration} ms',
+        'diag.ranNoSummary': 'Ran · see evidence for the result',
         'diag.planned': 'Awaiting its first run · {steps} steps',
         'diag.blocked': 'Refused before dialing',
         'diag.generated': 'Ready to run · {steps} steps',
-        'action.openEvidence': 'Evidence',
-        'action.replay': 'Replay',
+        'diag.notRun': 'No run on record',
+        'action.replay': 'Run just this case',
         'label.deterministic': '100% deterministic assertion',
         'label.assertionConfidence': 'Assertion confidence',
         'label.wireRounds': 'Wire rounds',
@@ -584,17 +583,16 @@ window.__ModuleLoader__.load({
         'label.selectCase': '选中这条用例',
         'label.selectAll': '选中这一组的全部用例',
         'label.selectedCases': '已选用例: {count}/{total}',
-        'action.runSerial': '触发全量串行运行',
-        'label.serialReady': '串行批量运行就绪',
-        'label.serialHint': '一次只跑一条：端口和数据库行永远不会被两个用例同时占用。',
         'label.passRate': '通过率',
         'label.lastInspected': '最近活动',
         'diag.passed': '{checks} 项检查 · {duration} ms',
+        'diag.failed': '{checks} 项检查 · {failed} 项失败 · {duration} ms',
+        'diag.ranNoSummary': '已运行 · 结果见证据',
         'diag.planned': '待运行 · {steps} 步',
         'diag.blocked': '拨号之前被护栏拒绝',
         'diag.generated': '可以运行 · {steps} 步',
-        'action.openEvidence': '查看证据',
-        'action.replay': '重放',
+        'diag.notRun': '尚无运行记录',
+        'action.replay': '只运行这一条',
         'label.deterministic': '100% 确定性断言',
         'label.assertionConfidence': '断言置信度',
         'label.wireRounds': '网络往返',
@@ -950,15 +948,28 @@ window.__ModuleLoader__.load({
       const selectedCount = (project.cases || []).filter((entry) => checked[entry.file]).length
 
       const groupEndpoint = (bucket) => (bucket.endpoint ? [bucket.endpoint] : [])
+      // The Host flattens the last report onto each case (verdict, durationMs,
+      // checks, failed, lastRunAt); only a history fixture wraps it in `run`.
+      // Read both, and never leave a run row's diagnosis blank — an empty cell
+      // next to a green chip reads as "nothing to say", which is worse than a
+      // short "ran, see evidence".
       const diagnose = (entry) => {
         if (entry.status === 'planned') return { text: t('diag.planned', { steps: (entry.steps || []).length }), tone: 'idle' }
         if (entry.status === 'generated') return { text: t('diag.generated', { steps: (entry.steps || []).length }), tone: 'idle' }
         if (entry.status === 'blocked') return { text: entry.blockedReason || t('diag.blocked'), tone: 'warn' }
-        if (entry.run && entry.run.summary) {
-          const s = entry.run.summary
-          return { text: t('diag.passed', { checks: s.checks ?? 0, duration: s.durationMs ?? 0 }), tone: 'pass' }
+        const summary = entry.run && entry.run.summary ? entry.run.summary : entry.lastRunAt ? entry : null
+        if (summary) {
+          const checks = summary.checks ?? 0
+          const duration = summary.durationMs ?? 0
+          if (entry.status === 'failed' || entry.verdict === 'failed' || entry.verdict === 'refused') {
+            return { text: t('diag.failed', { checks, failed: summary.failed ?? 0, duration }), tone: 'fail' }
+          }
+          if (entry.status === 'passed' || entry.verdict === 'passed') {
+            return { text: t('diag.passed', { checks, duration }), tone: 'pass' }
+          }
+          return { text: t('diag.ranNoSummary', { checks, duration }), tone: 'idle' }
         }
-        return { text: '', tone: 'idle' }
+        return { text: t('diag.notRun'), tone: 'idle' }
       }
 
       return h(
@@ -1111,15 +1122,14 @@ window.__ModuleLoader__.load({
                         h(
                           'span',
                           { className: 'e2e-col-actions' },
+                          // One icon, one job: run this case alone. Opening its
+                          // evidence is what clicking anywhere on the row already
+                          // does, so a second button for it only made the column
+                          // look like two buttons nobody needed.
                           h(
                             'button',
-                            { type: 'button', className: 'e2e-icon-btn', title: t('action.replay'), onClick: () => onRunSelected([entry.file]) },
+                            { type: 'button', className: 'e2e-icon-btn e2e-run-one', title: t('action.replay'), onClick: () => onRunSelected([entry.file]) },
                             '▶',
-                          ),
-                          h(
-                            'button',
-                            { type: 'button', className: 'e2e-icon-btn', title: t('action.openEvidence'), onClick: () => onOpen(entry.file) },
-                            '◎',
                           ),
                         ),
                       )
@@ -1131,18 +1141,12 @@ window.__ModuleLoader__.load({
           ? h(
               'div',
               { className: 'e2e-serial-bar' },
-              h('span', { className: 'e2e-serial-dot', 'aria-hidden': 'true' }),
-              h('span', { className: 'e2e-serial-ready' }, t('label.serialReady')),
-              h('span', { className: 'e2e-muted' }, t('label.serialHint')),
-              h('div', { className: 'e2e-spacer' }),
               h('span', { className: 'e2e-serial-count' }, t('label.selectedCases', { count: selectedCount, total: counts.all })),
-              h(
-                Btn,
-                { small: true, primary: true, disabled: running || selectedCount === 0, onClick: () => onRunSelected((project.cases || []).filter((entry) => checked[entry.file]).map((entry) => entry.file)) },
-                running ? t('action.running') : t('action.runSerial'),
-              ),
-              // Delete asks twice here too: these are the cases' own files, and
-              // there is no undo. The second press inside four seconds commits.
+              h('div', { className: 'e2e-spacer' }),
+              // Running lives in the top bar next to "back" and "settings":
+              // one place to start a run, whether selected or full regression.
+              // This footer is only about what is ticked — delete asks twice,
+              // because these are case files and there is no undo.
               h(
                 Btn,
                 {
@@ -4676,8 +4680,14 @@ window.__ModuleLoader__.load({
 .e2e-case-row { border-bottom: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; }
 .e2e-case-row:hover { background: var(--dsw-alias-bg-layer-1); }
 .e2e-case-open {
+  /* The row is a 6-column grid; this button owns columns 2–5 (id, name,
+     status, diagnosis). Left in a single 110px cell, its four inner columns
+     were crammed into one header's width and the status/diagnosis cells read
+     as empty. Spanning the tracks and repeating their widths aligns every
+     cell under its own header. */
+  grid-column: 2 / 6;
   display: grid;
-  grid-template-columns: 110px minmax(200px, 1.6fr) 110px minmax(160px, 1.2fr);
+  grid-template-columns: minmax(0, 110px) minmax(200px, 1.6fr) minmax(0, 110px) minmax(160px, 1.2fr);
   align-items: center;
   gap: 10px;
   appearance: none;
@@ -4689,7 +4699,9 @@ window.__ModuleLoader__.load({
   cursor: pointer;
   padding: 0;
   min-width: 0;
+  box-sizing: border-box;
 }
+.e2e-case-open > span { min-width: 0; }
 .e2e-case-check { width: 14px; height: 14px; cursor: pointer; accent-color: var(--dsw-alias-brand-primary); }
 .e2e-case-id { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; font-weight: 600; }
 .e2e-case-id.is-failed { color: var(--dsw-alias-state-error-primary); }
@@ -4725,22 +4737,20 @@ window.__ModuleLoader__.load({
 .e2e-group-balance-fail { color: var(--dsw-alias-state-error-primary); }
 .e2e-group-balance-error { color: var(--dsw-alias-state-warn-primary); }
 .e2e-group-fold { cursor: pointer; }
-/* The sticky serial-run bar: the one place "what will run" and "run it" meet. */
+/* The selection footer sits under the scroller. It used to be position:sticky,
+   but inside the split flex column that never pinned it to the viewport — it
+   just floated between the list and the run panel with a heavy border. Runs
+   live in the top bar now, so this is a quiet one-line count + delete. */
 .e2e-serial-bar {
-  position: sticky;
-  bottom: 0;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  z-index: 5;
+  padding: 6px 10px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: none;
 }
-.e2e-serial-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-state-success-primary); animation: e2e-pulse 1.6s ease-in-out infinite; }
-.e2e-serial-ready { font-weight: 600; font-size: 12.5px; }
 .e2e-serial-count { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+.e2e-run-one:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); color: var(--dsw-alias-brand-primary); }
 .e2e-col-id { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
 .e2e-col-status, .e2e-col-priority { display: flex; align-items: center; gap: 6px; }
 .e2e-test-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
