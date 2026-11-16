@@ -1100,6 +1100,39 @@ await test('a report without snapshots still shows the rows it read', async () =
   assert.doesNotMatch(text, /read no database rows/, 'it does not claim there were none')
 })
 
+// A generated skeleton connects its database but asserts nothing on it: the
+// empty tab said "read no rows", which read like a defect. When the steps prove
+// the connection happened, the page says what would fill the tab instead.
+await test('a connected database with no assertions says what would fill the tab', async () => {
+  pastReport = {
+    ...PAST_REPORT,
+    report: {
+      ...PAST_REPORT.report,
+      steps: [{ at: 0, name: 'database.connected' }],
+      evidence: { request: null, response: null, logs: null, database: [], snapshots: [] },
+    },
+  }
+  try {
+    const opened = await openDetail()
+    const dbTab = elementsOf(opened).find(
+      (node) =>
+        node.props &&
+        String(node.props.className || '').split(' ').includes('e2e-mode-btn') &&
+        /Database/.test(textOf(node)),
+    )
+    assert.ok(dbTab, 'the detail page offers the database tab')
+    dbTab.props.onClick()
+    const withDb = await settle(() => mainComponent({}))
+    const text = textOf(withDb)
+    assert.match(text, /asserts on none of it/, 'the page explains the empty tab')
+    assert.match(text, /expect\.database/, 'and names the YAML block that fills it')
+    assert.doesNotMatch(text, /read no database rows/, 'it does not claim rows were read')
+  } finally {
+    pastReport = PAST_REPORT
+    await openDetail()
+  }
+})
+
 await test('a case carries its own two halves, and the project carries no tabs', async () => {
   const detail = await settle(() => mainComponent({}))
   // Three tabs could not be three places: "cases" was the project and the other

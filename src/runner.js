@@ -94,6 +94,11 @@ export async function runCase(definition, options = {}) {
   // stopped afterwards: a process this run did not start is not this run's to
   // kill, and killing it would take down whatever else is using it.
   let reused = false
+  // The follower line count at the moment the request was sent. A service that
+  // does not log the trace header still separates this run's traffic from its
+  // startup chatter by that mark: everything before it is Tomcat banners and
+  // connection pools, everything from it is what the case actually caused.
+  let logWindowStart = 0
   const connections = new Map()
   let fatal = null
   let teardownReport = null
@@ -132,7 +137,14 @@ export async function runCase(definition, options = {}) {
     // request and say so loudly, rather than pass on a broader match silently.
     const all = service.follower.lines
     const limit = asserted ? definition.expect.logs.maxLines : 4000
-    const lines = (scopedOk ? scoped : all).slice(-limit)
+    // When the trace id is present the scope is exact. When it is not, the
+    // honest fallback is the window from the request onward — startup noise is
+    // the same on every run and buries the line that matters. The kept tail is
+    // the whole window up to the cap: 120 lines of a 4500-line run hid the
+    // request's own output behind startup chatter, which is why the console
+    // tab was called "incomplete".
+    const windowed = scopedOk || logWindowStart === 0 ? (scopedOk ? scoped : all) : all.slice(logWindowStart)
+    const lines = windowed.slice(-limit)
     if (asserted && !scopedOk && assertNow) {
       warnings.push(
         `no log line carried the trace id ${wanted}: the service does not put the ${traceHeader} header into its logs, ` +
@@ -155,13 +167,15 @@ export async function runCase(definition, options = {}) {
       collected: assertNow ? 'after-request' : 'at-teardown',
       totalLines: all.length,
       scopedLines: scoped.length,
-      lines: lines.slice(-120),
+      windowStart: scopedOk || logWindowStart === 0 ? 0 : logWindowStart,
+      lines,
     }
     step('logs.collected', {
       totalLines: all.length,
       scopedLines: scoped.length,
       scanned: lines.length,
       traceIdPresent: scopedOk,
+      windowed: windowed.length !== all.length,
       // Which call produced these lines. A console collected during teardown
       // stops where the failure did, and saying so is the difference between
       // "the service printed nothing more" and "nothing more was read".
@@ -370,6 +384,11 @@ export async function runCase(definition, options = {}) {
       headers: sanitizeHeaders(requestSpec.headers),
       body: requestSpec.body ?? null,
     }
+    // Mark where this run's own output begins. A service that logs no trace id
+    // (Record's pattern does not carry %X{traceId}) still separates the request
+    // window from its startup banners by this mark, and the console tab falls
+    // back to it.
+    logWindowStart = service ? service.follower.lines.length : 0
     step('request.sent', { method: requestSpec.method, url: requestSpec.url })
 
     let response = null

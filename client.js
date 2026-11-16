@@ -201,6 +201,8 @@ window.__ModuleLoader__.load({
         'label.logsNotAsserted':
           'Kept for evidence, not asserted on: this case does not check the console, so a green run says the service answered, not that it printed nothing alarming.',
         'label.noSnapshots': 'This run read no database rows.',
+        'label.noDatabaseAsserts':
+          'A database was connected for this run, but the case asserts on none of it — the "读取数据库" panel only fills in when the YAML has an expect.database block, and this generated skeleton has none yet. Add one to see the rows this endpoint read or wrote.',
         'label.afterOnly': 'After the request only',
         'label.readAfterRequest': 'Read after the request',
         'label.snapshotGap':
@@ -484,6 +486,8 @@ window.__ModuleLoader__.load({
         'label.logsNotAsserted':
           '这份日志只是证据，没有被断言：这条用例不检查控制台，所以绿只说明服务答复了，不说明它没有打印过难看的异常。',
         'label.noSnapshots': '这次运行没有读取数据库行。',
+        'label.noDatabaseAsserts':
+          '这次运行连上了数据库，但用例没有对它做任何断言——「读取数据库」只会在 YAML 里写了 expect.database 时才有内容，而生成的骨架里还没有。补一个 expect.database 就能看到这个接口读了或写了哪些行。',
         'label.afterOnly': '只有请求之后',
         'label.readAfterRequest': '请求之后读到的',
         'label.snapshotGap': '没有前后对比：查询两次都失败了，或者这条用例没有数据库断言。',
@@ -1949,7 +1953,9 @@ window.__ModuleLoader__.load({
                       { className: 'e2e-stack' },
                       evidence.database.map((entry, index) => h(DatabaseRows, { key: index, t, entry })),
                     )
-                  : h('div', { className: 'e2e-muted' }, t('label.noSnapshots'))
+                  : steps.some((item) => item.name === 'database.connected')
+                    ? h('div', { className: 'e2e-muted' }, t('label.noDatabaseAsserts'))
+                    : h('div', { className: 'e2e-muted' }, t('label.noSnapshots'))
               : null,
             tab === 'code' ? h('pre', { className: 'e2e-pre is-plan' }, (selected && selected.yaml) || '') : null,
             tab === 'shots' ? h(ShotsPane, { t, browser: evidence && evidence.browser }) : null,
