@@ -39,7 +39,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node dev/unit.test.mjs && node dev/reload.test.mjs && node dev/client.test.mjs && node dev/resolve.test.mjs && node dev/registry.test.mjs && node dev/scan.test.mjs && node dev/scaffold.test.mjs && node dev/projects.test.mjs && node dev/render.test.mjs && node dev/edit.test.mjs && node dev/scope.test.mjs && node dev/browser.test.mjs",
+    "test": "node dev/unit.test.mjs && node dev/reload.test.mjs && node dev/client.test.mjs && node dev/resolve.test.mjs && node dev/registry.test.mjs && node dev/scan.test.mjs && node dev/scaffold.test.mjs && node dev/projects.test.mjs && node dev/testplan.test.mjs && node dev/render.test.mjs && node dev/edit.test.mjs && node dev/scope.test.mjs && node dev/browser.test.mjs",
     "test:unit": "node dev/unit.test.mjs",
     "test:reload": "node dev/reload.test.mjs",
     "test:client": "node dev/client.test.mjs",
@@ -50,6 +50,7 @@
     "test:pg": "node dev/pg.test.mjs",
     "test:idea": "node dev/idea.test.mjs",
     "test:projects": "node dev/projects.test.mjs",
+    "test:testplan": "node dev/testplan.test.mjs",
     "test:render": "node dev/render.test.mjs",
     "test:edit": "node dev/edit.test.mjs",
     "test:scope": "node dev/scope.test.mjs",

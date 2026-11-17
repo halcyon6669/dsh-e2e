@@ -227,7 +227,60 @@ const BOOTSTRAP = {
   runtimes: [],
 }
 
-/** One case as `GET /case` returns it, for the plan editor's form. */
+/**
+ * `GET /plan` — the whole project read as one document, as the Host derives it.
+ * Two use cases so the page has something to group, and one High / one Medium so
+ * the priority dot has both fillings to draw.
+ */
+const PLAN = {
+  ok: true,
+  project: 'https://127.0.0.1:8443',
+  name: 'Record',
+  path: 'E:/project/backend/Record',
+  document: {
+    useCases: [
+      {
+        useCase: 'POST /auth/register',
+        slug: 'post-auth-register',
+        testCases: [
+          {
+            id: 'REG-001',
+            priority: 'High',
+            name: 'a registration activates the mailbox',
+            subFeature: 'Registration',
+            description: '',
+            steps: ['POST /auth/register', 'status 200'],
+          },
+          {
+            id: 'REG-002',
+            priority: 'Medium',
+            name: 'a duplicate address is refused',
+            subFeature: 'Registration',
+            description: '',
+            steps: ['POST /auth/register'],
+          },
+        ],
+      },
+      {
+        useCase: 'POST /auth/logout',
+        slug: 'post-auth-logout',
+        testCases: [
+          {
+            id: 'REG-003',
+            priority: 'Low',
+            name: 'a logout ends the session',
+            subFeature: 'Registration',
+            description: '',
+            steps: ['POST /auth/logout'],
+          },
+        ],
+      },
+    ],
+  },
+  yaml: 'useCases:\n  - useCase: POST /auth/register\n    slug: post-auth-register\n',
+  cases: 3,
+  files: ['C:\\cases\\auth-register.yaml', 'C:\\cases\\auth-confirm.yaml', 'C:\\cases\\auth-logout.yaml'],
+}/** One case as `GET /case` returns it, for the plan editor's form. */
 const CASE_FILE = {
   ok: true,
   path: 'C:\\cases\\auth-register.yaml',
@@ -502,7 +555,11 @@ globalThis.fetch = async (url, options) => {
   }
   const body = path.startsWith('/projects')
     ? PROJECTS
-    : path.startsWith('/case?')
+    : path.startsWith('/plan')
+      ? method === 'POST'
+        ? { ok: true, changed: 1, saved: [{ file: 'C:\\cases\\auth-register.yaml', id: 'REG-001', fields: { title: 'x' } }], plan: PLAN }
+        : PLAN
+      : path.startsWith('/case?')
       ? CASE_FILE
       : path.startsWith('/report?')
         ? pastReport
@@ -1479,6 +1536,170 @@ await test('the scan asks the Host about the open project', async () => {
     'E:/project/backend/Record',
     'the scan reads the checkout the reader opened',
   )
+})
+
+/* ---- the test plan page ---- */
+
+// "Edit test plan" sits beside the scan button because both answer "what is this
+// project testing": the scan writes cases from the code, the plan edits the cases
+// already written. The page is a view over the same files, so the proof is the
+// round trip — what it shows, and what it sends back.
+await test('the test plan page reads the project as one document and writes it back', async () => {
+  let tree = await settle(() => mainComponent({}))
+  const caseList = elementsOf(tree).find(
+    (node) =>
+      node.props &&
+      String(node.props.className || '').split(' ').includes('e2e-crumb') &&
+      /Record/.test(textOf(node)),
+  )
+  assert.ok(caseList, 'the breadcrumb leads back to the case list')
+  caseList.props.onClick()
+  tree = await settle(() => mainComponent({}))
+
+  // The button exists in the case list's toolbar, beside the scan button.
+  const bar = elementsOf(tree).find((node) => node.props && node.props.className === 'e2e-cases-bar')
+  assert.ok(bar, 'the case list has a toolbar')
+  const toolbarText = textOf(bar)
+  assert.match(toolbarText, /Scan the project for endpoints/, 'the scan button is still there')
+  assert.match(toolbarText, /Edit test plan/, 'the plan entry point sits beside it')
+
+  const planButton = elementsOf(bar).find(
+    (node) =>
+      node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /Edit test plan/.test(textOf(node)),
+  )
+  assert.ok(planButton, 'the plan button is a button in the toolbar')
+  planButton.props.onClick()
+  const page = await settle(() => mainComponent({}))
+  const text = textOf(page)
+
+  assert.ok(
+    requested.includes('/plan?project=https%3A%2F%2F127.0.0.1%3A8443'),
+    'the page asked the Host for the open project\u2019s plan',
+  )
+  assert.match(text, /Edit test plan/, 'the page carries its title')
+  assert.match(text, /Nothing is saved until you press Save changes/, 'the page says what saving means')
+
+  // One card per use case, each naming itself and how many tests it holds.
+  assert.match(text, /POST \/auth\/register/, 'the first use case is named by its endpoint')
+  assert.match(text, /POST \/auth\/logout/, 'the second use case is there too')
+  assert.match(text, /2 tests/, 'a use case counts its own tests')
+  assert.match(text, /1 tests/, 'and a use case with one counts that one')
+
+  // Every row carries the three things the plan is about.
+  const rows = elementsOf(page).filter((node) => node.props && node.props.className === 'e2e-testplan-row')
+  assert.equal(rows.length, 3, 'one row per test, across both use cases')
+  assert.match(textOf(rows[0]), /REG-001/, 'the row leads with the case id')
+  assert.match(textOf(rows[0]), /High/, 'the priority is a word, not a colour alone')
+  assert.match(textOf(rows[0]), /a registration activates the mailbox/, 'and the test is named')
+  assert.match(textOf(rows[1]), /Medium/, 'the second priority is drawn differently')
+  assert.match(textOf(rows[2]), /Low/, 'and the third')
+
+  // The dots are the priority as a shape: filled, half, ring.
+  const dots = elementsOf(page).filter((node) => node.props && node.props.className === 'e2e-testplan-dot')
+  assert.equal(dots.length, 3, 'one dot per priority')
+  const carriers = elementsOf(page).filter(
+    (node) => node.props && /e2e-testplan-priority is-(high|medium|low)/.test(String(node.props.className || '')),
+  )
+  assert.deepEqual(
+    carriers.map((node) => String(node.props.className).replace('e2e-testplan-priority ', '')),
+    ['is-high', 'is-medium', 'is-low'],
+    'the three fills are three different styles',
+  )
+
+  // "+ Add Test" per use case, not one global button.
+  const adds = elementsOf(page).filter((node) => node.props && node.props.className === 'e2e-add-test')
+  assert.equal(adds.length, 2, 'one add button per use case')
+
+  // Editing a name is the round trip: the field changes, Save lightens, and the
+  // request carries the plan — not a description of the change.
+  const nameButton = elementsOf(page).find(
+    (node) => node.props && node.props.className === 'e2e-testplan-name' && /a registration activates/.test(textOf(node)),
+  )
+  assert.ok(nameButton, 'the test name is the thing you click to edit it')
+  nameButton.props.onClick()
+  const editing = await settle(() => mainComponent({}))
+  const fields = elementsOf(editing).filter(
+    (node) => node.props && String(node.props.className || '').includes('e2e-testplan-edit'),
+  )
+  assert.equal(fields.length, 1, 'one row is being edited')
+  const nameInput = elementsOf(fields[0]).find((node) => node.type === 'input')
+  nameInput.props.onChange({ target: { value: 'a registration sends the mail' } })
+  const dirty = await settle(() => mainComponent({}))
+  assert.match(textOf(dirty), /unsaved|Unsaved/i, 'the page admits it has unsaved work')
+
+  const saveButton = elementsOf(dirty).find(
+    (node) =>
+      node.props &&
+      /\be2e-btn\b/.test(String(node.props.className || '')) &&
+      /^Save changes$/.test(textOf(node)),
+  )
+  assert.ok(saveButton, 'the page carries its own save')
+  assert.equal(saveButton.props.disabled, false, 'a pending edit arms the save')
+  saveButton.props.onClick()
+  await settle(() => mainComponent({}))
+
+  const sent = posted.filter((entry) => entry.path.startsWith('/plan')).pop()
+  assert.ok(sent, 'the save reached the Host')
+  assert.equal(sent.body.project, 'https://127.0.0.1:8443', 'the plan names the project it belongs to')
+  const saved = sent.body.document.useCases.flatMap((useCase) => useCase.testCases)
+  const renamed = saved.find((testCase) => testCase.id === 'REG-001')
+  assert.equal(renamed.name, 'a registration sends the mail', 'the new name travels in the document')
+  assert.equal(renamed.priority, 'High', 'and the fields the reader did not touch travel unchanged')
+})
+
+await test('the plan reads and writes YAML through the Host, with the lines numbered', async () => {
+  let tree = await settle(() => mainComponent({}))
+  // Whatever the previous test left open, the page is the plan: its own mode
+  // switch is the fastest way to say so.
+  let yamlTab = elementsOf(tree).find(
+    (node) => node.props && /e2e-mode-btn/.test(String(node.props.className || '')) && /^YAML$/.test(textOf(node)),
+  )
+  if (!yamlTab) {
+    const crumb = elementsOf(tree).find(
+      (node) => node.props && String(node.props.className || '').split(' ').includes('e2e-crumb') && /Record/.test(textOf(node)),
+    )
+    crumb.props.onClick()
+    tree = await settle(() => mainComponent({}))
+    const planButton = elementsOf(tree).find(
+      (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /Edit test plan/.test(textOf(node)),
+    )
+    planButton.props.onClick()
+    tree = await settle(() => mainComponent({}))
+    yamlTab = elementsOf(tree).find(
+      (node) => node.props && /e2e-mode-btn/.test(String(node.props.className || '')) && /^YAML$/.test(textOf(node)),
+    )
+  }
+  assert.ok(yamlTab, 'the page switches between the form and the document')
+  yamlTab.props.onClick()
+  const yamlView = await settle(() => mainComponent({}))
+
+  const editor = elementsOf(yamlView).find((node) => node.props && node.props.className === 'e2e-yaml-editor')
+  assert.ok(editor, 'the document is editable as text')
+  assert.match(String(editor.props.value), /^useCases:/, 'the editor shows the plan document the Host returned')
+
+  const gutter = elementsOf(yamlView).find((node) => node.props && node.props.className === 'e2e-yaml-gutter')
+  assert.ok(gutter, 'the editor has a line-number gutter')
+  const lineCount = String(editor.props.value).split('\n').length
+  assert.equal(
+    textOf(gutter),
+    Array.from({ length: lineCount }, (unused, index) => String(index + 1)).join(''),
+    'the gutter numbers every line the text has, and no more',
+  )
+
+  // A save from the YAML view sends the text, not a parsed copy of it: the Host
+  // is where a bad line gets named.
+  editor.props.onChange({ target: { value: 'useCases:\n  - useCase: POST /auth/register\n    slug: post-auth-register\n    testCases: []\n' } })
+  const dirty = await settle(() => mainComponent({}))
+  const saveButton = elementsOf(dirty).find(
+    (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /^Save changes$/.test(textOf(node)),
+  )
+  assert.equal(saveButton.props.disabled, false, 'a changed document arms the save')
+  saveButton.props.onClick()
+  await settle(() => mainComponent({}))
+
+  const sent = posted.filter((entry) => entry.path.startsWith('/plan')).pop()
+  assert.equal(typeof sent.body.yaml, 'string', 'the YAML view sends the text it was given')
+  assert.equal(sent.body.document, undefined, 'and not a document it parsed itself')
 })
 
 /* ---- the settings sheet ---- */

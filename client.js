@@ -246,6 +246,13 @@ window.__ModuleLoader__.load({
         'action.saveChanges': 'Save changes',
         'action.addTest': 'Add test',
 
+        'plan.title': 'Edit test plan',
+        'plan.hint': 'This page reads the case files as one plan. Saving writes back only the fields shown here — a test stays the file it always was.',
+        'plan.subtitle': 'Add use cases and tests, or change any test’s priority, title, goal and steps. Nothing is saved until you press Save changes.',
+        'plan.saved': 'Saved {count} case(s).',
+        'plan.priority': 'Priority',
+        'plan.editThis': 'Edit this test’s name, priority and goal',
+
         'status.all': 'All',
         'status.planned': 'Planned',
         'status.generated': 'Generated',
@@ -530,6 +537,13 @@ window.__ModuleLoader__.load({
         'action.done': '完成',
         'action.saveChanges': '保存改动',
         'action.addTest': '添加用例',
+
+        'plan.title': '编辑测试计划',
+        'plan.hint': '这一页把用例文件读成一份计划。保存只会写回这里显示的字段——每个用例还是它原来的那个文件。',
+        'plan.subtitle': '可以添加用例，也可以改任意用例的优先级、名称、目标与步骤。按下「保存改动」之前什么都不会写。',
+        'plan.saved': '已保存 {count} 个用例。',
+        'plan.priority': '优先级',
+        'plan.editThis': '修改这个用例的名称、优先级与目标',
 
         'status.all': '全部',
         'status.planned': '待编写',
@@ -923,7 +937,7 @@ window.__ModuleLoader__.load({
      * reader thinks in; the endpoint is still on the row, so the grouping never
      * hides the route.
      */
-    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onScan, onRunAll, running, checked, onToggleChecked, onRunSelected, onDeleteSelected, confirmDeleteSelected, deleting }) {
+    function CaseTable({ t, project, filter, onFilter, query, onQuery, onOpen, onScan, onEditPlan, onRunAll, running, checked, onToggleChecked, onRunSelected, onDeleteSelected, confirmDeleteSelected, deleting }) {
       const counts = project.statusCounts || { all: 0 }
       const tabs = ['all', 'planned', 'generated', 'running', 'passed', 'failed', 'blocked']
       const [folded, setFolded] = React.useState({})
@@ -1001,6 +1015,11 @@ window.__ModuleLoader__.load({
           // project line above already carries it, and two buttons that do the
           // same thing 30px apart only make the reader choose.
           h(Btn, { small: true, onClick: onScan }, t('action.scan')),
+          // The plan is the same collection read the other way round: one row per
+          // use case instead of one row per file. It sits beside the scan button
+          // because both answer "what is this project testing" — scanning writes
+          // cases from the code, the plan edits the cases already written.
+          h(Btn, { small: true, onClick: onEditPlan }, t('action.editTestPlan')),
         ),
         h(
           'div',
@@ -1431,6 +1450,245 @@ window.__ModuleLoader__.load({
                   }),
           ),
         ),
+      )
+    }
+
+    /**
+     * The whole project read as one plan.
+     *
+     * A case file answers "what does this test say". This page answers the
+     * other question — "what are we testing at all" — by listing every use case
+     * and every test under it, with the only three things the plan is about:
+     * name, priority, and what the case is for.
+     *
+     * It is a view over the case files, not a second copy of them: saving goes
+     * back through the same field patch the case form uses, so a rename here is
+     * a rename there. The document it edits is exactly what the Host derives,
+     * which is why the YAML view shows the same numbers the form does.
+     */
+    function TestPlanPage(props) {
+      const { t, project, plan, loading, error, onSave, onDone, onAddTest, onOpenCase, busy } = props
+      const [mode, setMode] = React.useState('form')
+      const [document, setDocument] = React.useState(plan ? plan.document : null)
+      const [filter, setFilter] = React.useState('')
+      const [folded, setFolded] = React.useState({})
+      const [editing, setEditing] = React.useState(null)
+      const [text, setText] = React.useState(plan ? plan.yaml : '')
+
+      // The Host's answer is the truth. When it changes — first load, or a save
+      // that came back with the re-derived plan — the page starts from it again.
+      React.useEffect(() => {
+        setDocument(plan ? plan.document : null)
+        setText(plan ? plan.yaml : '')
+      }, [plan])
+
+      const base = plan ? JSON.stringify(plan.document) : 'null'
+      const dirty = mode === 'yaml' ? text !== (plan ? plan.yaml : '') : JSON.stringify(document) !== base
+
+      const useCases = (document && document.useCases) || []
+      const needle = String(filter || '').trim().toLowerCase()
+      const visible = useCases
+        .map((useCase) => ({
+          ...useCase,
+          testCases: (useCase.testCases || []).filter(
+            (testCase) =>
+              needle === '' ||
+              String(testCase.id || '').toLowerCase().includes(needle) ||
+              String(testCase.name || '').toLowerCase().includes(needle),
+          ),
+        }))
+        .filter((useCase) => useCase.testCases.length > 0)
+
+      const totalTests = useCases.reduce((sum, useCase) => sum + (useCase.testCases || []).length, 0)
+
+      const patchTestCase = (id, fields) => {
+        setDocument((current) => {
+          if (!current) return current
+          return {
+            ...current,
+            useCases: (current.useCases || []).map((useCase) => ({
+              ...useCase,
+              testCases: (useCase.testCases || []).map((testCase) =>
+                String(testCase.id) === String(id) ? { ...testCase, ...fields } : testCase,
+              ),
+            })),
+          }
+        })
+      }
+
+      const toggle = (name) => setFolded((state) => ({ ...state, [name]: !state[name] }))
+
+      // YAML is the same document by another route: the text is sent to the Host
+      // as it stands, so a tab in the wrong place is reported against the line it
+      // is on instead of being guessed at here.
+      const save = () => {
+        if (mode === 'yaml') onSave(null, text)
+        else onSave(document, null)
+      }
+
+      const saveable = Boolean(dirty) && !Boolean(busy)
+
+      const lineCount = text.split('\n').length
+
+      return h(
+        'div',
+        { className: 'e2e-main e2e-testplan' },
+        h(
+          'div',
+          { className: 'e2e-testplan-head' },
+          h(
+            'div',
+            { className: 'e2e-testplan-title-row' },
+            h('h2', { className: 'e2e-testplan-title' }, t('plan.title')),
+            h('span', { className: 'e2e-testplan-info', title: t('plan.hint'), 'aria-label': t('plan.hint') }, 'ⓘ'),
+            project ? h('span', { className: 'e2e-muted' }, project.name) : null,
+          ),
+          h('div', { className: 'e2e-testplan-subtitle' }, t('plan.subtitle')),
+        ),
+        h(
+          'div',
+          { className: 'e2e-cases-bar' },
+          h(
+            'div',
+            { className: 'e2e-mode' },
+            ['form', 'yaml'].map((name) =>
+              h(
+                'button',
+                {
+                  key: name,
+                  type: 'button',
+                  className: `e2e-mode-btn${mode === name ? ' is-active' : ''}`,
+                  onClick: () => setMode(name),
+                },
+                t(`label.mode.${name}`),
+              ),
+            ),
+          ),
+          h('span', { className: 'e2e-testplan-total' }, t('label.tests', { count: totalTests })),
+          h('div', { className: 'e2e-spacer' }),
+          h('span', { className: 'e2e-muted' }, dirty ? t('label.unsaved') : t('label.noChanges')),
+          h(Btn, { small: true, onClick: onDone }, t('action.done')),
+          h(
+            Btn,
+            {
+              small: true,
+              variant: 'primary',
+              disabled: !saveable,
+              onClick: save,
+            },
+            busy ? t('action.saving') : t('action.saveChanges'),
+          ),
+        ),
+        loading ? h('div', { className: 'e2e-empty-box' }, t('state.loading')) : null,
+        error
+          ? h('div', { className: 'e2e-error-box' }, h('div', null, error))
+          : mode === 'yaml'
+            ? h(
+                'div',
+                { className: 'e2e-yaml-wrap' },
+                h(
+                  'div',
+                  { className: 'e2e-yaml-gutter', 'aria-hidden': 'true' },
+                  Array.from({ length: lineCount }, (unused, index) => h('div', { key: index }, String(index + 1))),
+                ),
+                h('textarea', {
+                  className: 'e2e-yaml-editor',
+                  spellCheck: false,
+                  value: text,
+                  onChange: (event) => setText(event.target.value),
+                }),
+              )
+            : h(
+                'div',
+                { className: 'e2e-testplan-body' },
+                h('input', {
+                  className: 'e2e-input e2e-testplan-search',
+                  placeholder: t('label.searchCases'),
+                  value: filter,
+                  onChange: (event) => setFilter(event.target.value),
+                }),
+                visible.length === 0
+                  ? h('div', { className: 'e2e-empty-box' }, t('empty.noCases'))
+                  : visible.map((useCase) =>
+                      h(
+                        'div',
+                        { key: useCase.slug || useCase.useCase, className: 'e2e-plan-card' },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'e2e-plan-group-head e2e-testplan-group',
+                            onClick: () => toggle(useCase.useCase),
+                            'aria-expanded': folded[useCase.useCase] ? 'false' : 'true',
+                          },
+                          h('span', { className: `e2e-chevron${folded[useCase.useCase] ? ' is-folded' : ''}` }, folded[useCase.useCase] ? '▸' : '▾'),
+                          h('span', { className: 'e2e-plan-group-name' }, useCase.useCase),
+                          h('span', { className: 'e2e-muted' }, t('label.tests', { count: (useCase.testCases || []).length })),
+                        ),
+                        folded[useCase.useCase]
+                          ? null
+                          : (useCase.testCases || []).map((testCase) =>
+                              editing === testCase.id
+                                ? h(
+                                    'div',
+                                    { key: testCase.id, className: 'e2e-testplan-edit' },
+                                    h('input', {
+                                      className: 'e2e-input',
+                                      value: testCase.name || '',
+                                      autoFocus: true,
+                                      onChange: (event) => patchTestCase(testCase.id, { name: event.target.value }),
+                                    }),
+                                    h(
+                                      'select',
+                                      {
+                                        className: 'e2e-input',
+                                        value: testCase.priority || 'Medium',
+                                        onChange: (event) => patchTestCase(testCase.id, { priority: event.target.value }),
+                                      },
+                                      ['High', 'Medium', 'Low'].map((word) => h('option', { key: word, value: word }, word)),
+                                    ),
+                                    h('input', {
+                                      className: 'e2e-input',
+                                      placeholder: t('field.description'),
+                                      value: testCase.description || '',
+                                      onChange: (event) => patchTestCase(testCase.id, { description: event.target.value }),
+                                    }),
+                                    h(Btn, { small: true, onClick: () => setEditing(null) }, t('action.done')),
+                                  )
+                                : h(
+                                    'div',
+                                    { key: testCase.id, className: 'e2e-testplan-row' },
+                                    h('span', { className: 'e2e-col-id' }, testCase.id),
+                                    h(
+                                      'span',
+                                      {
+                                        className: `e2e-testplan-priority is-${String(testCase.priority || 'Medium').toLowerCase()}`,
+                                        title: t('plan.priority'),
+                                      },
+                                      h('span', { className: 'e2e-testplan-dot' }),
+                                      String(testCase.priority || 'Medium'),
+                                    ),
+                                    h(
+                                      'button',
+                                      {
+                                        type: 'button',
+                                        className: 'e2e-testplan-name',
+                                        title: t('plan.editThis'),
+                                        onClick: () => setEditing(testCase.id),
+                                      },
+                                      testCase.name || testCase.id,
+                                    ),
+                                    h(Btn, { small: true, onClick: () => onOpenCase && onOpenCase(testCase.id) }, t('label.caseView.evidence')),
+                                  ),
+                            ),
+                        h(
+                          'button',
+                          { type: 'button', className: 'e2e-add-test', onClick: () => onAddTest && onAddTest(useCase) },
+                          t('action.addTest'),
+                        ),
+                      ),
+                    ),
+              ),
       )
     }
 
@@ -2881,6 +3139,11 @@ window.__ModuleLoader__.load({
       const [draftFields, setDraftFields] = React.useState(null)
       const [baseFields, setBaseFields] = React.useState(null)
       const [planMode, setPlanMode] = React.useState('form')
+      // The whole project read as one plan. It is fetched when the page opens
+      // rather than with every refresh: a plan is a question the reader asks on
+      // purpose, and the case list is the page they leave open.
+      const [planState, setPlanState] = React.useState({ status: 'idle', data: null, error: null })
+      const [planBusy, setPlanBusy] = React.useState(false)
       // The run whose report is expanded under the history list. Kept apart from
       // `run` (the live run) because reading yesterday's report must not make the
       // page look like something is running right now.
@@ -3243,6 +3506,41 @@ window.__ModuleLoader__.load({
           setScanState({ status: 'ready', data, error: null })
         } catch (error) {
           setScanState({ status: 'error', data: null, error: error.message })
+        }
+      }
+
+      const openPlan = async () => {
+        setView('testplan')
+        setPlanState({ status: 'loading', data: planState.data, error: null })
+        try {
+          const data = await apiGet(`/plan?project=${q(project.key)}`)
+          setPlanState({ status: 'ready', data, error: null })
+        } catch (error) {
+          setPlanState({ status: 'error', data: null, error: error.message })
+        }
+      }
+
+      /**
+       * The plan's save: the form sends the document, the YAML view sends the
+       * text. Either way the Host re-derives the plan and answers with it, so
+       * whatever the page shows next is what the files now say — not what the
+       * page hoped they would say.
+       */
+      const savePlanDocument = async (document, yaml) => {
+        setPlanBusy(true)
+        try {
+          const body = { project: project.key }
+          if (typeof yaml === 'string') body.yaml = yaml
+          else body.document = document
+          const data = await apiPost('/plan', body)
+          setPlanState({ status: 'ready', data: data.plan, error: null })
+          setNotice({ message: t('plan.saved', { count: data.changed }) })
+          await refresh()
+        } catch (error) {
+          setNotice({ isError: true, message: error.message })
+          setPlanState((current) => ({ ...current, error: error.message }))
+        } finally {
+          setPlanBusy(false)
         }
       }
 
@@ -4081,6 +4379,7 @@ window.__ModuleLoader__.load({
             setView('detail')
           },
           onScan: openScan,
+          onEditPlan: openPlan,
           onRunAll: () => runAll(projectCases.map((entry) => entry.file)),
           running: busy === 'run-all' || Boolean(batch && batch.status === 'running'),
           checked,
@@ -4249,6 +4548,33 @@ window.__ModuleLoader__.load({
         runControls,
       )
 
+      // The plan page is the project read as a document rather than as a table:
+      // one card per use case, one row per test, and the whole thing as YAML for
+      // the edits the form deliberately does not offer.
+      const testPlanPage = h(TestPlanPage, {
+        t,
+        project,
+        plan: planState.data,
+        loading: planState.status === 'loading',
+        error: planState.error,
+        busy: planBusy,
+        onSave: savePlanDocument,
+        onDone: () => setView('cases'),
+        // "Add test" from a use case card opens the create form with that group
+        // filled in, exactly as the per-case plan editor does.
+        onAddTest: (useCase) => {
+          setView('cases')
+          setAdding(true)
+          setPendingGroup((useCase && useCase.useCase) || '')
+        },
+        onOpenCase: (caseId) => {
+          const entry = (project.cases || []).find((row) => String(row.caseId || row.id) === String(caseId))
+          if (!entry) return
+          openCase(entry.file)
+          setView('detail')
+        },
+      })
+
       // The settings sheet is reachable from both views: the landing page is where
       // a reader arrives before a project is open, and the sheet is about the
       // machine, not about the project. One element, rendered by both returns.
@@ -4337,7 +4663,13 @@ window.__ModuleLoader__.load({
               h('button', { type: 'button', className: 'e2e-btn is-small', onClick: () => setNotice(null) }, '×'),
             )
           : null,
-        view === 'plan' ? planPage : view === 'detail' ? detailPage : casesPage,
+        view === 'testplan'
+          ? testPlanPage
+          : view === 'plan'
+            ? planPage
+            : view === 'detail'
+              ? detailPage
+              : casesPage,
         // The scan dialog sits above whatever page is showing: it is a question
         // about the project as a whole, and closing it should put the reader back
         // exactly where they were.
@@ -4831,6 +5163,119 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
 .e2e-plan-row.is-active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
 .e2e-plan-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-plan-editor { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+/* ---- the test plan page ------------------------------------------------
+   The project as one document: a use case card per group, one row per test
+   carrying the three things the plan is about (id, priority, name), and the
+   same document as YAML in the other mode. It is a reading page, so it takes
+   the whole width and scrolls itself rather than sharing a split. */
+.e2e-testplan { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.e2e-testplan-head { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; }
+.e2e-testplan-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.e2e-testplan-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.e2e-testplan-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 1;
+  cursor: help;
+}
+.e2e-testplan-subtitle { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.e2e-testplan-total {
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.e2e-testplan-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
+.e2e-testplan-search { flex: 0 0 auto; max-width: 280px; }
+.e2e-testplan-group { width: 100%; appearance: none; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.e2e-testplan-row {
+  display: grid;
+  grid-template-columns: minmax(0, 96px) minmax(0, 96px) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 7px;
+  border-radius: 6px;
+}
+.e2e-testplan-row:hover { background: var(--dsw-alias-bg-layer-2); }
+.e2e-testplan-priority { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+.e2e-testplan-priority.is-high { color: var(--dsw-alias-label-primary); }
+.e2e-testplan-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--dsw-alias-label-tertiary);
+  background: transparent;
+  flex: 0 0 8px;
+}
+.e2e-testplan-priority.is-high .e2e-testplan-dot { background: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-primary); }
+.e2e-testplan-priority.is-medium .e2e-testplan-dot {
+  background: linear-gradient(90deg, var(--dsw-alias-label-secondary) 0%, var(--dsw-alias-label-secondary) 50%, transparent 50%);
+}
+.e2e-testplan-priority.is-low .e2e-testplan-dot { background: transparent; }
+.e2e-testplan-name {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-weight: 600;
+  font-size: 12.5px;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+  padding: 0;
+}
+.e2e-testplan-name:hover { text-decoration: underline; }
+.e2e-testplan-edit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 110px) minmax(0, 1.4fr) auto; gap: 6px; align-items: center; padding: 5px 7px; }
+/* The YAML view: a gutter of numbers that scrolls with the text, because the
+   one thing a text editor must not do is disagree with itself about lines. */
+.e2e-yaml-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 9px;
+  overflow: auto;
+  background: var(--dsw-alias-bg-layer-1);
+}
+.e2e-yaml-gutter {
+  flex: 0 0 auto;
+  padding: 10px 6px 10px 10px;
+  text-align: right;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--dsw-alias-label-tertiary);
+  user-select: none;
+  border-right: 1px solid var(--dsw-alias-border-l1);
+}
+.e2e-yaml-editor {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 100%;
+  border: 0;
+  outline: none;
+  resize: none;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
 /* ---- the case detail page ----------------------------------------------
    Layout is a verdict card, a tab strip, then a two-column inspection area:
    the tab you asked about on the left, the wire and the log tail on the

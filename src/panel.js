@@ -36,6 +36,8 @@ import {
 } from './registry.js'
 import { generateCase, explainFailure, GenerateError } from './ai.js'
 import { listProjects } from './projects.js'
+import { dumpYaml, parseYaml } from './yaml.js'
+import { planDocument, planChanges } from './testplan.js'
 import { describeSteps, hasAssertions } from './plan.js'
 import { applyFields, assertEditable, formFields } from './edit.js'
 import {
@@ -492,6 +494,79 @@ export function createPanel({ ctx, config = {}, state }) {
     const current = await readFile(path, 'utf8')
     const patched = applyFields(current, fields)
     return saveCase(path, patched)
+  }
+
+  /**
+   * The project's test plan, as one document.
+   *
+   * The project is named by the same key the case list uses, because that is
+   * what the page has: a project row, not a path. The document is derived from
+   * the case files on every read — a plan cached anywhere else is a plan that
+   * can disagree with the tests it claims to describe.
+   */
+  async function readPlan(input = {}) {
+    const key = String(input.project || '').trim()
+    const listing = await listProjects({ config, state, env: process.env })
+    const project = key ? (listing.projects || []).find((row) => row.key === key) : null
+    if (!project) {
+      throw new PanelError(key ? `no project with key ${key}` : 'pass the project key, as "project"', 422)
+    }
+    const plan = planDocument(project)
+    return {
+      ok: true,
+      project: project.key,
+      name: project.name,
+      path: project.projectPath,
+      document: plan.document,
+      yaml: await dumpYaml(plan.document),
+      cases: plan.document.useCases.reduce((sum, useCase) => sum + useCase.testCases.length, 0),
+      files: [...plan.meta.values()].map((item) => item.file),
+    }
+  }
+
+  /**
+   * Saves a plan document back into the case files.
+   *
+   * Only the fields the plan shows are written (title, priority, description),
+   * through the same `saveFields` the form uses: the plan is a second door into
+   * the same room, not a second room. Unknown ids and files outside the case
+   * roots are refused rather than skipped — a save that silently drops a test
+   * the author just wrote is the one failure mode that costs data.
+   */
+  async function savePlan(input = {}) {
+    let document = input.document && typeof input.document === 'object' ? input.document : null
+    // The YAML view sends the text it was given. Parsing it here, where the
+    // error can name the line, is the difference between "the plan is wrong"
+    // and "line 47 has a tab in it".
+    if (!document && typeof input.yaml === 'string') {
+      document = await parseYaml(input.yaml, 'the test plan')
+    }
+    if (!document) throw new PanelError('pass the plan document, as "document" (or its text, as "yaml")', 422)
+    const key = String(input.project || '').trim()
+    if (!key) throw new PanelError('pass the project key, as "project"', 422)
+    // The meta the save needs comes from the project as it is on disk now, so a
+    // plan built from a stale page cannot rename the wrong file.
+    const listing = await listProjects({ config, state, env: process.env })
+    const project = (listing.projects || []).find((row) => row.key === key)
+    if (!project) throw new PanelError(`no project with key ${key}`, 422)
+    const live = planDocument(project)
+    const known = new Set([...live.meta.values()].map((item) => item.id))
+    for (const useCase of Array.isArray(document.useCases) ? document.useCases : []) {
+      for (const testCase of Array.isArray(useCase && useCase.testCases) ? useCase.testCases : []) {
+        if (testCase && testCase.id && !known.has(String(testCase.id))) {
+          throw new PanelError(
+            `the plan names ${testCase.id}, which is not a case in this project; add a test from the case list`,
+            422,
+          )
+        }
+      }
+    }
+    const saved = []
+    for (const change of planChanges(document, live.meta)) {
+      const result = await saveFields(change.file, change.fields)
+      saved.push({ file: result.file, id: change.id, fields: change.fields })
+    }
+    return { ok: true, changed: saved.length, saved, plan: await readPlan({ project: key }) }
   }
 
   /** Checks a case without running it: does it load, and would the guard allow it? */
@@ -1074,6 +1149,11 @@ export function createPanel({ ctx, config = {}, state }) {
     } },
     { method: 'GET', path: '/reports', handler: async () => listReports({ config, state }) },
     { method: 'GET', path: '/projects', handler: async () => listProjects({ config, state, env: process.env }) },
+    // The plan is the project read as one document. It is derived on every read,
+    // so the only thing it can disagree with is itself.
+    { method: 'GET', path: '/plan', handler: async (_body, url) =>
+      readPlan({ project: url.searchParams.get('project') || '' }) },
+    { method: 'POST', path: '/plan', mutate: true, handler: async (body) => savePlan(body) },
     { method: 'POST', path: '/project', mutate: true, handler: async (body) => createProject(body) },
     {
       method: 'DELETE',
