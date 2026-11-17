@@ -233,12 +233,11 @@ window.__ModuleLoader__.load({
         'label.payload': 'Payload',
         'label.bodyResponse': 'Body response',
         'label.keyLogLines': 'Showing {shown} key line(s) — framework startup and pool chatter are hidden',
+        'label.logTailCaption': '{shown} key lines of {total}',
         'label.lines': 'lines',
         'label.teardown': 'Teardown',
         'label.errors': 'error(s)',
         'label.cleanTeardown': 'clean',
-        'label.statements': 'Statements',
-        'label.trace': 'Trace',
 
         'action.editTestPlan': 'Edit test plan',
         'action.foldGroup': 'Fold this group',
@@ -519,12 +518,11 @@ window.__ModuleLoader__.load({
         'label.payload': '请求体',
         'label.bodyResponse': '响应体',
         'label.keyLogLines': '只展示 {shown} 行关键日志 —— 框架启动和连接池的噪音已隐藏',
+        'label.logTailCaption': '共 {total} 行，显示 {shown} 行关键日志',
         'label.lines': '行',
         'label.teardown': '清理',
         'label.errors': '处错误',
         'label.cleanTeardown': '干净',
-        'label.statements': '语句',
-        'label.trace': '追踪',
 
         'action.editTestPlan': '编辑测试计划',
         'action.foldGroup': '收起这一组',
@@ -1651,24 +1649,24 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The tail of the console, in the rail, where a failing run is read.
+     * A short tail of the console, in the rail, where a failing run is read.
      *
-     * The Console tab is the full dump; this is the twelve lines you see while
-     * reading a checkpoint, without leaving the checkpoint.
+     * The Console tab is the full dump; this is a handful of key lines, each
+     * clipped to one row, so an SQL statement cannot grow into a wall of text.
      */
     function LogTail(props) {
       const { t, logs } = props
       if (!logs) return h('div', { className: 'e2e-muted' }, t('label.noLogs'))
-      const lines = keyLogLines(logs.lines).slice(-14)
+      const lines = keyLogLines(logs.lines).slice(-6)
       return h(
         'div',
         null,
-        h('div', { className: 'e2e-wire-caption' }, `${logs.scopedLines}/${logs.totalLines} ${t('label.lines')}`),
+        h('div', { className: 'e2e-wire-caption' }, t('label.logTailCaption', { shown: lines.length, total: logs.totalLines })),
         lines.length > 0
           ? h(
               'div',
               { className: 'e2e-logtail' },
-              lines.map((line, index) => h('div', { key: index, className: `e2e-logline${levelClass(line)}` }, String(line))),
+              lines.map((line, index) => h('div', { key: index, className: `e2e-logline${levelClass(line)}`, title: String(line) }, String(line))),
             )
           : h('div', { className: 'e2e-muted' }, t('label.noLogs')),
       )
@@ -1713,41 +1711,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /**
-     * What teardown did.
-     *
-     * A green run that leaked a service on port 8443 is not a green run; the
-     * report already knows, and this strip is where it says so.
-     */
-    function AuditBar(props) {
-      const { t, report, teardown } = props
-      if (!report) return null
-      const errors = (teardown && teardown.errors) || []
-      const statements = (teardown && teardown.sql && teardown.sql.length) || 0
-      return h(
-        'div',
-        { className: 'e2e-audit' },
-        h(
-          'span',
-          { className: `e2e-audit-item${errors.length > 0 ? ' is-bad' : ''}` },
-          h('span', { className: 'e2e-audit-key' }, t('label.teardown')),
-          errors.length > 0 ? `${errors.length} ${t('label.errors')}` : t('label.cleanTeardown'),
-        ),
-        h(
-          'span',
-          { className: 'e2e-audit-item' },
-          h('span', { className: 'e2e-audit-key' }, t('label.statements')),
-          String(statements),
-        ),
-        h(
-          'span',
-          { className: 'e2e-audit-item' },
-          h('span', { className: 'e2e-audit-key' }, t('label.trace')),
-          h('code', { className: 'e2e-code' }, String(report.traceId || '—')),
-        ),
-      )
-    }
-
     function CaseDetail(props) {
       const { t, selected, history, historyRun, onOpenRun, historyLoading, onEdit, onRun, running, onDone, onOpenReport } =
         props
@@ -1770,6 +1733,7 @@ window.__ModuleLoader__.load({
       const durationMs = report ? report.durationMs : latest ? latest.durationMs : null
       const fatal = report ? report.fatal : null
       const teardown = report ? report.teardown : null
+      const teardownErrors = (teardown && teardown.errors) || []
       const environment = (report && report.environment) || {}
       const statusKey = !verdict ? 'planned' : verdict === 'refused' ? 'blocked' : verdict
       const statusWord = t(`status.${statusKey}`)
@@ -1884,6 +1848,13 @@ window.__ModuleLoader__.load({
                 { className: `e2e-hero-meta-item${fatal ? ' is-fail' : ' is-pass'}` },
                 `${t('label.fatalBoundary')}: ${fatal ? String(fatal.name || fatal.message || 'fatal') : t('label.none')}`,
               ),
+              report
+                ? h(
+                    'span',
+                    { className: `e2e-hero-meta-item${teardownErrors.length > 0 ? ' is-fail' : ' is-pass'}` },
+                    `${t('label.teardown')}: ${teardownErrors.length > 0 ? `${teardownErrors.length} ${t('label.errors')}` : t('label.cleanTeardown')}`,
+                  )
+                : null,
             ),
             h(
               'div',
@@ -2079,7 +2050,6 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
-        h(AuditBar, { t, report, teardown }),
       )
     }
 
@@ -5126,8 +5096,9 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
   line-height: 1.65;
   padding: 1px 8px;
   color: var(--dsw-alias-label-secondary);
-  white-space: pre-wrap;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .e2e-logline.is-warn { color: var(--dsw-alias-state-warn-primary); background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, transparent); }
 .e2e-logline.is-error,
@@ -5166,23 +5137,6 @@ button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* The teardown strip: facts that decide whether a green run counts. */
-.e2e-audit {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  align-items: center;
-  padding: 7px 12px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  font-size: 11.5px;
-  color: var(--dsw-alias-label-secondary);
-}
-.e2e-audit-item { display: inline-flex; align-items: baseline; gap: 6px; }
-.e2e-audit-item.is-bad { color: var(--dsw-alias-state-error-primary); }
-.e2e-audit-key { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dsw-alias-label-tertiary); }
 
 /* A failed checkpoint gets a tinted row: on a page of greens, the one red line
    has to find the reader, not the other way round. */

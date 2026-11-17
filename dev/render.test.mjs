@@ -1043,6 +1043,17 @@ await test('the group balance and row grid stay inside the scroller', () => {
   assert.equal(listBtns.some((node) => /Trigger serial run|串行/.test(textOf(node))), false, 'the footer does not repeat the run actions')
 })
 
+await test('the rail console tail is short, clipped to one row, and honestly captioned', () => {
+  // The rail used to dump fourteen raw MyBatis lines that wrapped into a wall
+  // and claimed "3/42 lines" — neither the count nor the shape was useful.
+  assert.match(source, /keyLogLines\(logs\.lines\)\.slice\(-6\)/, 'the rail keeps six key lines')
+  const logline = source.match(/\.e2e-logline\s*\{[^}]*\}/)
+  assert.ok(logline, 'the log line has a style block')
+  assert.match(logline[0], /white-space:\s*nowrap/, 'one line per row')
+  assert.match(logline[0], /text-overflow:\s*ellipsis/, 'long SQL is clipped, not wrapped')
+  assert.equal(/\.e2e-audit\s*\{/.test(source), false, 'the dead audit-strip style is gone')
+})
+
 /* ---------- the case detail page ---------- */
 
 const caseRow = elementsOf(listed).find(
@@ -1627,14 +1638,19 @@ await test('the verdict card puts the count next to the word', async () => {
   assert.match(text, /Strict verdict/, 'the verdict says what kind of verdict it is')
 })
 
-// A green run that leaked a service is not a green run. Teardown belongs on the
-// page, not three clicks into the report.
-await test('the teardown strip is on the page, not in the report', async () => {
+// Teardown still counts — a green run that leaked a service is not green — but
+// it is one fact in the hero row now, not a stray strip pinned to the bottom.
+await test('teardown is a compact fact in the hero, with no bottom strip', async () => {
   const opened = await openDetail()
   const text = textOf(opened)
-  assert.match(text, /Teardown/, 'the strip has a heading word')
+  assert.match(text, /Teardown/, 'teardown is named in the hero')
   assert.match(text, /clean/, 'nothing went wrong, and it says so')
-  assert.match(text, /trace-abc123/, 'the trace id, so a log search is possible')
+  const hero = elementsOf(opened).find((node) => node.props && node.props.className === 'e2e-hero-meta')
+  assert.ok(hero, 'the hero meta row exists')
+  assert.match(textOf(hero), /Teardown.*clean/, 'teardown sits in the hero, not at the bottom')
+  assert.ok(!elementsOf(opened).some((node) => node.props && String(node.props.className || '').split(' ').includes('e2e-audit')),
+    'the old full-width audit strip is gone')
+  assert.doesNotMatch(text, /trace-abc123/, 'the trace id is not duplicated here — it lives in the wire rail')
 })
 
 // The rail is the point of this layout: what went over the wire is visible
