@@ -2912,6 +2912,11 @@ window.__ModuleLoader__.load({
           // Both in parallel: the table and the case list are the same page load,
           // and a second round trip would only make the slower one visible.
           const [data, projectData] = await Promise.all([apiGet('/bootstrap'), apiGet('/projects')])
+          // The write switch is a durable panel preference, not page state. The
+          // Host answers it in bootstrap — restoring here means a reload, an HMR
+          // swap, or a return from the case detail cannot silently turn writes
+          // back off.
+          if (data && typeof data.allowWrites === 'boolean') setAllowWrites(data.allowWrites)
           setBoot({ status: 'ready', data, projects: projectData, error: null })
         } catch (error) {
           setBoot({ status: 'error', data: null, projects: null, error: error.message })
@@ -2921,6 +2926,18 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         refresh()
       }, [refresh])
+
+      // Flipping the write switch takes effect at once — the run buttons read
+      // this same state — and is written straight to the Host. The next reload
+      // then restores it from bootstrap, so the switch can never quietly revert.
+      const changeAllowWrites = async (next) => {
+        setAllowWrites(Boolean(next))
+        try {
+          await apiPost('/settings', { allowWrites: Boolean(next) })
+        } catch (error) {
+          setNotice({ message: error.message })
+        }
+      }
 
       // Poll a live run. The Host runs it as a job precisely so this can be a poll.
       const runId = run && run.id
@@ -3320,6 +3337,10 @@ window.__ModuleLoader__.load({
         try {
           const query = project && project.projectPath ? `?projectPath=${q(project.projectPath)}` : ''
           const data = await apiGet(`/settings${query}`)
+          // The sheet and the run buttons must agree on the same durable answer.
+          // Settings is a second source for it (bootstrap is the first), so a
+          // reader who opens the sheet sees the value that was restored at load.
+          if (data && typeof data.allowWrites === 'boolean') setAllowWrites(data.allowWrites)
           const targets = data.targets || []
           const databases = data.databases || []
           // The sheet opens on the project the reader is standing in. A
@@ -3392,7 +3413,7 @@ window.__ModuleLoader__.load({
       const saveSettingsSheet = async () => {
         setSettingsBusy(true)
         try {
-          const payload = { projectPath: project && project.projectPath ? project.projectPath : '' }
+          const payload = { projectPath: project && project.projectPath ? project.projectPath : '', allowWrites }
           if (settingsTarget) {
             const targets = (settingsState.data && settingsState.data.targets) || []
             const current = targets.find((entry) => entry.name === settingsTarget) || null
@@ -4249,7 +4270,7 @@ window.__ModuleLoader__.load({
             onDatabase: pickSettingsDatabase,
             onSource: setSettingsSource,
             onConfig: setSettingsConfig,
-            onAllowWrites: setAllowWrites,
+            onAllowWrites: changeAllowWrites,
             onSave: saveSettingsSheet,
           })
         : null

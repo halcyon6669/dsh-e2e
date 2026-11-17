@@ -1544,6 +1544,41 @@ await test('picking a source and saving writes the registry, not the page', asyn
   )
 })
 
+/* ---- the write switch is a durable preference, not page state ---- */
+
+await test('flipping the write switch persists it instead of letting it revert', async () => {
+  let tree = await settle(() => mainComponent({}))
+  const settingsButton = elementsOf(tree).find(
+    (node) => node.props && /\be2e-btn\b/.test(String(node.props.className || '')) && /^Settings$/.test(textOf(node)),
+  )
+  assert.ok(settingsButton, 'the top bar carries the settings entry point')
+  settingsButton.props.onClick()
+  const opened = await settle(() => mainComponent({}))
+
+  // The switch sits in the label that names it — not next to the run button,
+  // which is why only looking here finds the right checkbox.
+  const label = elementsOf(opened).find(
+    (node) => node.type === 'label' && /Allow setup\/teardown SQL to write/.test(textOf(node)),
+  )
+  assert.ok(label, 'the write switch has its label')
+  const checkbox = elementsOf(label).find((node) => node.type === 'input' && node.props.type === 'checkbox')
+  assert.ok(checkbox, 'it is a real checkbox')
+  checkbox.props.onChange({ target: { checked: true } })
+  await settle(() => mainComponent({}))
+
+  const sent = posted.filter((entry) => entry.path.startsWith('/settings')).pop()
+  assert.ok(sent, 'flipping the switch wrote straight through to the Host')
+  assert.equal(sent.body.allowWrites, true, 'the durable preference is what was written')
+
+  // The same source that fed bootstrap now feeds the sheet, so the box stays on.
+  const stillOpen = await settle(() => mainComponent({}))
+  const labelNow = elementsOf(stillOpen).find(
+    (node) => node.type === 'label' && /Allow setup\/teardown SQL to write/.test(textOf(node)),
+  )
+  const boxNow = elementsOf(labelNow).find((node) => node.type === 'input' && node.props.type === 'checkbox')
+  assert.equal(boxNow.props.checked, true, 'the switch is still on after the render settled')
+})
+
 await test('a typed port becomes the target address, and the rest of the URL is kept', async () => {
   let tree = await settle(() => mainComponent({}))
   const settingsButton = elementsOf(tree).find(

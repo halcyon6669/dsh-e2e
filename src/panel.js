@@ -294,6 +294,7 @@ export function createPanel({ ctx, config = {}, state }) {
       history = { dir: reports(), reports: [], error: error.message }
     }
 
+    const preferences = await readPreferences()
     return {
       ok: true,
       plugin: {
@@ -307,6 +308,7 @@ export function createPanel({ ctx, config = {}, state }) {
       reports: history,
       ide: { host: config.ideHost || '127.0.0.1', port: Number(config.idePort || 64342) },
       runtimes: [...runs.values()].map((run) => summariseRun(run)),
+      allowWrites: preferences.allowWrites,
     }
   }
 
@@ -1422,6 +1424,38 @@ export function createPanel({ ctx, config = {}, state }) {
   }
 
   /**
+   * Panel-wide preferences that have to outlive a page reload. `allowWrites`
+   * gates SQL write statements in setup/teardown — a machine-level answer
+   * ("does the reader trust these cases to write to their database?"), not a
+   * per-case one — so it lives in one small file beside the data dir rather
+   * than in any case or registry file. Host state itself is in memory and is
+   * rebuilt on every reload, which is precisely why the switch kept reverting.
+   */
+  function preferencesFile() {
+    return join(state.dataDir || defaultCaseDir({ state }), 'preferences.json')
+  }
+
+  async function readPreferences() {
+    try {
+      const text = await readFile(preferencesFile(), 'utf8')
+      const parsed = JSON.parse(text)
+      return { allowWrites: Boolean(parsed && parsed.allowWrites === true) }
+    } catch {
+      return { allowWrites: false }
+    }
+  }
+
+  async function writePreferences(input = {}) {
+    if (typeof input.allowWrites !== 'boolean') return false
+    const file = preferencesFile()
+    await mkdir(dirname(file), { recursive: true })
+    const current = await readPreferences()
+    const next = { ...current, allowWrites: input.allowWrites }
+    await writeFile(file, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+    return true
+  }
+
+  /**
    * Everything the settings sheet needs, in one answer: what the registry holds
    * today, and the two catalogs a reader can point it at.
    */
@@ -1480,6 +1514,7 @@ export function createPanel({ ctx, config = {}, state }) {
     const projectPath = String(input.projectPath || '').trim() || (await defaultProjectPath())
     const dbSources = await listDbMcpSources({ env: process.env })
     const ide = await listIdeConfigurations(projectPath, input)
+    const preferences = await readPreferences()
     return {
       ok: true,
       file: registry && registry.file ? registry.file : null,
@@ -1489,21 +1524,28 @@ export function createPanel({ ctx, config = {}, state }) {
       dbSources,
       ide,
       projectPath: projectPath || null,
+      allowWrites: preferences.allowWrites,
     }
   }
 
   /**
-   * Writes the settings that live in the registry.
+   * Writes the settings that live in the registry, plus the one panel-wide
+   * preference that lives in the data dir.
    *
-   * Three edits exist today: a target's address (the port it binds), a target's
-   * IDE run configuration, and a database pointing at a dsh-db-mcp source
-   * instead of carrying its own host and password. All of them go through
-   * `writeEntry`, which edits the file's text — the registry is hand-written and
-   * its comments have to survive.
+   * Three registry edits exist today: a target's address (the port it binds), a
+   * target's IDE run configuration, and a database pointing at a dsh-db-mcp
+   * source instead of carrying its own host and password. All of them go
+   * through `writeEntry`, which edits the file's text — the registry is
+   * hand-written and its comments have to survive. `allowWrites` is different:
+   * it gates SQL writes in setup/teardown and outlives page reloads in a small
+   * preferences file under the data dir.
    */
   async function saveSettings(input = {}) {
     const dir = roots()[0] || defaultCaseDir({ state })
     const changes = []
+    if (typeof input.allowWrites === 'boolean' && (await writePreferences(input))) {
+      changes.push({ section: 'preferences', name: 'allowWrites', changed: true })
+    }
     const target = input.target && typeof input.target === 'object' ? input.target : null
     if (target && String(target.name || '').trim()) {
       const name = String(target.name).trim()

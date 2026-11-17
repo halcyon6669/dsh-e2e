@@ -1700,6 +1700,32 @@ await testAsync('a source that cannot be opened is refused, in words that name i
   }
 })
 
+await testAsync('the write switch survives a reload: it is a durable panel preference', async () => {
+  const prefFile = join(tmpDir, 'settings-data', 'preferences.json')
+  const before = await settingsPanel.readSettings({ projectPath: 'E:/project/backend/Record' })
+  assert.equal(before.allowWrites, false, 'off until a reader turns it on')
+
+  const saved = await settingsPanel.saveSettings({ allowWrites: true })
+  assert.equal(saved.ok, true)
+  assert.ok(saved.changes.some((change) => change.section === 'preferences'), 'the change is accounted for')
+  assert.equal(saved.settings.allowWrites, true, 'the same answer comes back from save')
+
+  const stored = JSON.parse(await readFile(prefFile, 'utf8'))
+  assert.equal(stored.allowWrites, true, 'it is really on disk, not just in React state')
+
+  // A brand-new panel over the same data dir is what a reload amounts to.
+  const reloaded = createPanel({
+    ctx: { get: () => undefined },
+    config: { caseDir: SETTINGS_CASES },
+    state: { dataDir: join(tmpDir, 'settings-data') },
+  })
+  assert.equal((await reloaded.readSettings({})).allowWrites, true, 'a fresh panel restores it')
+  assert.equal((await reloaded.bootstrap()).allowWrites, true, 'bootstrap carries it to the client on first paint')
+
+  await settingsPanel.saveSettings({ allowWrites: false })
+  assert.equal((await settingsPanel.readSettings({})).allowWrites, false, 'and the reader can turn it back off')
+})
+
 await testAsync('the settings read back what was written, and never a password', async () => {
   const settings = await settingsPanel.readSettings({ projectPath: 'E:/project/backend/Record' })
   assert.equal(settings.ok, true)
