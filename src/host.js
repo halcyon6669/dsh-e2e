@@ -16,6 +16,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createTools } from './tools.js'
 import { createPanel, PLUGIN_VERSION } from './panel.js'
+import { resolveIdeaPort } from './idea.js'
 import { caseRoots } from './store.js'
 import { parseYaml, parserCandidates } from './yaml.js'
 
@@ -75,16 +76,30 @@ export async function createHost({ dir, config = {}, ctx }) {
     }
   }
 
+  // The IDE MCP port is a setting inside IDEA, not a fixed constant. When the
+  // caller has not pinned one, detect the live port once at mount so the panel
+  // and every tool agree on it. A hardcoded default goes stale whenever IDEA is
+  // upgraded/downgraded or the setting changes, and a profile-level override
+  // gets wiped when the DSH profile is rewritten on a model switch — both of
+  // which have happened on this machine. Resolve it here, once, and hand the
+  // same effective config to every consumer.
+  const ideHost = config.ideHost || '127.0.0.1'
+  const configuredPort = Number(config.idePort || 0)
+  const idePort = configuredPort || (await resolveIdeaPort(ideHost, 64342))
+  state.idePort = idePort
+  state.idePortDetected = !configuredPort
+  const effectiveConfig = { ...config, ideHost, idePort }
+
   let tools = null
   try {
-    tools = createTools({ ctx, state, config })
+    tools = createTools({ ctx, state, config: effectiveConfig })
     state.tools = tools.toolNames
   } catch (error) {
     state.error = String((error && error.message) || error)
     throw error
   }
 
-  const panel = createPanel({ ctx, config, state })
+  const panel = createPanel({ ctx, config: effectiveConfig, state })
 
   /**
    * Reports whether the browser half is actually being served. A client bundle
@@ -320,8 +335,9 @@ export async function createHost({ dir, config = {}, ctx }) {
           resolvedCaseDirs: caseRoots({ config, state }),
           seeded: state.seeded,
           reportDir: config.reportDir || join(dir, 'reports'),
-          idePort: config.idePort || 64342,
-          ideHost: config.ideHost || '127.0.0.1',
+          idePort,
+          idePortDetected: state.idePortDetected,
+          ideHost,
           dataDir: dir,
           yaml: await yamlStatus(),
           client: clientStatus(),

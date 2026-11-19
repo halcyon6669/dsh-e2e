@@ -26,6 +26,7 @@ import { caseStatus, describeSteps, hasAssertions, summariseStatuses } from '../
 import { loadRegistry, resolveDatabase, describeDatabase, RegistryError, listDbMcpSources, writeEntry } from '../src/registry.js'
 import { parseYaml, parserCandidates } from '../src/yaml.js'
 import { LogFollower, probeRunningService } from '../src/service.js'
+import { resolveIdeaPort, IDEA_PORT_CANDIDATES } from '../src/idea.js'
 import { describeError } from '../src/errors.js'
 import { createPanel, PanelError } from '../src/panel.js'
 
@@ -1931,6 +1932,51 @@ await testAsync('a YAML read still works, and a syntax error names the file', as
     () => parseYaml('a: [1', 'some/case.yaml'),
     (error) => /invalid YAML/.test(error.message) && /some\/case\.yaml/.test(error.message),
   )
+})
+
+// ---------------------------------------------------------------- IDE port detection
+
+section('IDE port detection')
+
+await testAsync('resolveIdeaPort uses the preferred port when it answers', async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.end('')
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const port = server.address().port
+    const got = await resolveIdeaPort('127.0.0.1', port, 500, [])
+    assert.equal(got, port)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+await testAsync('resolveIdeaPort falls through to a candidate that is listening', async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.end('')
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const live = server.address().port
+    // A preferred port with nothing on it, then the live one as a candidate.
+    const got = await resolveIdeaPort('127.0.0.1', 1, 300, [live])
+    assert.equal(got, live)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+await testAsync('resolveIdeaPort keeps the preferred port when nobody answers', async () => {
+  const got = await resolveIdeaPort('127.0.0.1', 64342, 200, [])
+  assert.equal(got, 64342)
+})
+
+await test('the candidate list includes the historical alternate ports', () => {
+  assert.ok(IDEA_PORT_CANDIDATES.includes(64342))
+  assert.ok(IDEA_PORT_CANDIDATES.includes(64343))
 })
 
 // ---------------------------------------------------------------- done

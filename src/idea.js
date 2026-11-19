@@ -254,6 +254,37 @@ export class IdeaClient {
 }
 
 /**
+ * Ports the bundled JetBrains MCP Server plugin has been seen listening on.
+ * The default is 64342, but it is user-configurable and has changed across IDEA
+ * versions on this very machine (2026.1 was set to 64343).
+ */
+export const IDEA_PORT_CANDIDATES = [64342, 64343, 64344, 64345]
+
+/**
+ * Resolve the IDE MCP port that is actually listening.
+ *
+ * The port is a setting in IDEA (Settings > Tools > MCP Server), so a hardcoded
+ * default goes stale whenever IDEA is upgraded/downgraded or the setting is
+ * changed. A profile-level `idePort` override is not reliable either — rewriting
+ * the DSH profile wipes it. When the caller has no explicit port, probe the
+ * preferred port first and then a short list of neighbouring defaults, and use
+ * the first one that answers on /sse. If none answer, keep the preferred port so
+ * callers still report a meaningful "not reachable" error.
+ */
+export async function resolveIdeaPort(host, preferredPort, timeoutMs = 1200, extraCandidates = null) {
+  const preferred = Number(preferredPort || 64342)
+  const candidates = [preferred]
+  for (const port of extraCandidates || IDEA_PORT_CANDIDATES) {
+    if (!candidates.includes(port)) candidates.push(port)
+  }
+  for (const port of candidates) {
+    const probe = await probeIdea(host, port, timeoutMs)
+    if (probe.reachable) return port
+  }
+  return preferred
+}
+
+/**
  * Best-effort probe used by the environment guard: the IDE may simply not be
  * running, which is a normal state to report rather than an exception.
  */
