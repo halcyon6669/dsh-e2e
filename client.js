@@ -242,6 +242,8 @@ window.__ModuleLoader__.load({
         'action.editTestPlan': 'Edit test plan',
         'action.foldGroup': 'Fold this group',
         'action.expandGroup': 'Expand this group',
+        'action.collapseAll': 'Collapse all',
+        'action.expandAll': 'Expand all',
         'action.done': 'Done',
         'action.saveChanges': 'Save changes',
         'action.addTest': 'Add test',
@@ -275,9 +277,7 @@ window.__ModuleLoader__.load({
         'empty.noSearchResults': 'No test matches "{query}".',
         'notice.batchStarted': 'Running {count} cases in order — they go one at a time so two cases cannot write the same rows.',
         'notice.fieldsSaved': 'Saved {file}.',
-        'label.env': 'ENV',
         'label.origin': 'ORIGIN',
-        'label.suite': 'SUITE',
         // The two halves of one case. They belong to the case, not to the
         // project, so they are a switch inside it rather than tabs beside
         // "cases" — a project has one page, and every case has these two.
@@ -534,6 +534,8 @@ window.__ModuleLoader__.load({
         'action.editTestPlan': '编辑测试计划',
         'action.foldGroup': '收起这一组',
         'action.expandGroup': '展开这一组',
+        'action.collapseAll': '全部折叠',
+        'action.expandAll': '全部展开',
         'action.done': '完成',
         'action.saveChanges': '保存改动',
         'action.addTest': '添加用例',
@@ -567,9 +569,7 @@ window.__ModuleLoader__.load({
         'empty.noSearchResults': '没有用例匹配「{query}」。',
         'notice.batchStarted': '按顺序运行 {count} 个用例——一次一个，否则两个用例会写同一批数据行。',
         'notice.fieldsSaved': '已保存 {file}。',
-        'label.env': '环境',
         'label.origin': 'ORIGIN',
-        'label.suite': 'SUITE',
         // 同一个用例的两半。它们属于用例，不属于项目，所以是用例里的一个切换，
         // 而不是和“项目与用例清单”并排的 tab——项目只有一页，每个用例各有这两半。
         'label.caseView.evidence': '证据',
@@ -942,6 +942,12 @@ window.__ModuleLoader__.load({
       const tabs = ['all', 'planned', 'generated', 'running', 'passed', 'failed', 'blocked']
       const [folded, setFolded] = React.useState({})
       const toggle = (name) => setFolded((state) => ({ ...state, [name]: !state[name] }))
+      const allFolded = (project.groups || []).length > 0 && (project.groups || []).every((bucket) => folded[bucket.name])
+      const toggleAll = () => setFolded((state) => {
+        const next = {}
+        ;(project.groups || []).forEach((bucket) => { next[bucket.name] = !allFolded })
+        return next
+      })
       const needle = String(query || '').trim().toLowerCase()
       const matches = (entry) =>
         needle === '' ||
@@ -1020,6 +1026,15 @@ window.__ModuleLoader__.load({
           // because both answer "what is this project testing" — scanning writes
           // cases from the code, the plan edits the cases already written.
           h(Btn, { small: true, onClick: onEditPlan }, t('action.editTestPlan')),
+          // One click folds or unfolds every group: the list can be long, and a
+          // reader may want only the group heads (one glance at the whole plan)
+          // or all the rows at once (a sweep over the cases). Both labels are
+          // literal t() calls so the unused-key guard can see them.
+          groups.length > 0
+            ? allFolded
+              ? h(Btn, { small: true, onClick: toggleAll }, t('action.expandAll'))
+              : h(Btn, { small: true, onClick: toggleAll }, t('action.collapseAll'))
+            : null,
         ),
         h(
           'div',
@@ -4034,7 +4049,6 @@ window.__ModuleLoader__.load({
       const originLabel = project
         ? project.baseUrl || (firstTarget && firstTarget.baseUrl) || ''
         : (firstTarget && firstTarget.baseUrl) || ''
-      const targetName = firstTarget ? firstTarget.name : ''
       // The case the project line is about, if any. The plan editor can be open
       // without a case having a file yet (a generated draft), so the id falls
       // back through definition, then file, then empty — an empty label is not
@@ -4053,8 +4067,6 @@ window.__ModuleLoader__.load({
           h('span', { className: 'e2e-topnav-logo', 'aria-hidden': 'true' }, '◆'),
           h('strong', { className: 'e2e-topnav-name' }, 'dsh-e2e'),
           h('span', { className: 'e2e-topnav-title' }, t('panel.title')),
-          originLabel ? h('span', { className: 'e2e-topnav-chip', title: originLabel }, t('label.origin'), ': ', originLabel) : null,
-          targetName ? h('span', { className: 'e2e-topnav-chip' }, t('label.env'), ': ', targetName) : null,
           h('div', { className: 'e2e-spacer' }),
           // The way out of a project sits where every other page-level action
           // sits, in the bar at the top, rather than in a breadcrumb a reader has
@@ -4082,7 +4094,10 @@ window.__ModuleLoader__.load({
                 editingProjects ? t('action.doneEditing') : t('action.editProjects'),
               )
             : null,
-          project
+          // Run controls belong to the list, not to a single case: on the
+          // detail page "run selected" would run a selection this page cannot
+          // see, so the two buttons exist only while the project list is open.
+          project && view === 'cases'
             ? [
                 h(
                   Btn,
@@ -4107,7 +4122,9 @@ window.__ModuleLoader__.load({
                   t('action.runFullRegression'),
                 ),
               ]
-            : [
+            : null,
+          !project
+            ? [
                 editingProjects
                   ? h(
                       Btn,
@@ -4131,7 +4148,8 @@ window.__ModuleLoader__.load({
                   },
                   t('action.createProject'),
                 ),
-              ],
+              ]
+            : null,
         ),
         // The project line: where in the project you are, the two halves of the
         // open case, and the way to make another one. The project name is the way
@@ -4180,7 +4198,13 @@ window.__ModuleLoader__.load({
                   )
                 : null,
               h('div', { className: 'e2e-spacer' }),
-              h('span', { className: 'e2e-topnav-suite' }, t('label.suite'), ': ', project.name),
+              // The origin is what every case in this project will be sent to,
+              // so it belongs next to the action that makes another case — the
+              // reader checks where it points while writing one, not in the
+              // identity row at the top, where it was only decoration.
+              originLabel
+                ? h('span', { className: 'e2e-topnav-chip', title: originLabel }, t('label.origin'), ': ', originLabel)
+                : null,
               h(
                 Btn,
                 {
@@ -4808,13 +4832,6 @@ window.__ModuleLoader__.load({
   background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);
   font-weight: 600;
 }
-.e2e-topnav-suite {
-  font-family: var(--dsw-font-mono, ui-monospace, monospace);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  color: var(--dsw-alias-label-tertiary);
-  text-transform: uppercase;
-}
 .e2e-crumbs { display: flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 6px 12px 8px; flex: 0 0 auto; }
 .e2e-crumb {
   appearance: none;
@@ -4981,7 +4998,11 @@ window.__ModuleLoader__.load({
 .e2e-cases-head,
 .e2e-case-row {
   display: grid;
-  grid-template-columns: 26px 110px minmax(200px, 1.6fr) 110px minmax(160px, 1.2fr) 74px;
+  /* The checkbox column is wide because the per-case rows sit one level below
+     the group head: their checkboxes are indented into it, so the group-level
+     checkbox (outer, at the very left) and the case-level checkboxes are
+     visually two layers, not one column of identical boxes. */
+  grid-template-columns: 54px 110px minmax(200px, 1.6fr) 110px minmax(160px, 1.2fr) 74px;
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
@@ -4998,9 +5019,23 @@ window.__ModuleLoader__.load({
   padding-bottom: 6px;
 }
 /* The row itself is a div (it contains a checkbox and buttons); the whole
-   open area is one button so "read this case" stays one click. */
-.e2e-case-row { border-bottom: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; }
-.e2e-case-row:hover { background: var(--dsw-alias-bg-layer-1); }
+   open area is one button so "read this case" stays one click. A 1px CSS
+   dashed border renders as near-invisible dots at this size, so the
+   separator is drawn instead: a row of real dashes (8px on, 6px off) in the
+   darker border-l2 colour along the bottom edge. */
+.e2e-case-row {
+  border-bottom: none;
+  border-radius: 6px;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--dsw-alias-border-l2) 0 8px,
+    transparent 8px 14px
+  );
+  background-repeat: no-repeat;
+  background-position: bottom left;
+  background-size: 100% 1.5px;
+}
+.e2e-case-row:hover { background-color: var(--dsw-alias-bg-layer-1); }
 .e2e-case-open {
   /* The row is a 6-column grid; this button owns columns 2–5 (id, name,
      status, diagnosis). Left in a single 110px cell, its four inner columns
@@ -5025,7 +5060,12 @@ window.__ModuleLoader__.load({
 }
 .e2e-case-open > span { min-width: 0; }
 .e2e-case-check { width: 14px; height: 14px; cursor: pointer; accent-color: var(--dsw-alias-brand-primary); }
-.e2e-case-id { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; font-weight: 600; }
+/* The case rows sit one level below their group head, so their checkboxes are
+   indented — roughly two tab stops — instead of lining up with the group-level
+   checkbox at the outer edge. The indent is inside the row's first grid column,
+   which is wide enough (54px) to take 28px of margin plus the 14px box. */
+.e2e-case-row .e2e-case-check { margin-left: 28px; }
+.e2e-case-id { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .e2e-case-id.is-failed { color: var(--dsw-alias-state-error-primary); }
 .e2e-case-id.is-planned { color: var(--dsw-alias-label-tertiary); font-weight: 500; }
 .e2e-col-diagnostic {
@@ -5074,6 +5114,10 @@ window.__ModuleLoader__.load({
 .e2e-serial-count { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
 .e2e-run-one:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); color: var(--dsw-alias-brand-primary); }
 .e2e-col-id { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+/* The title column is the widest, so left-aligned text ends up glued to the
+   id column with the rest of the cell empty. Centering the cell places the
+   title in the middle of the row — between the id and the latest status. */
+.e2e-col-name { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
 .e2e-col-status, .e2e-col-priority { display: flex; align-items: center; gap: 6px; }
 .e2e-test-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .e2e-test-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -5101,17 +5145,24 @@ window.__ModuleLoader__.load({
 .e2e-plan-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .e2e-endpoint-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.e2e-plan-group-head:hover { background: var(--dsw-alias-bg-layer-2); }
+/* The group head (fold row) is a section break above its case rows, so it gets
+   a solid rule; the case rows below it are siblings, so they get a quieter
+   dashed rule. Solid vs dashed makes the group boundary read first. */
+.e2e-cases-body .e2e-plan-group-head { border-bottom: 1.5px solid var(--dsw-alias-border-l2); margin-bottom: 2px; }
 .e2e-chevron {
-  width: 22px;
-  flex: 0 0 22px;
+  width: 24px;
+  flex: 0 0 24px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 18px;
+  font-size: 22px;
+  font-weight: 700;
   line-height: 1;
   text-align: center;
   background: none;
   border: 0;
   padding: 0;
+  cursor: pointer;
 }
+.e2e-chevron:hover { color: var(--dsw-alias-label-primary); }
 .e2e-plan-group-name { font-weight: 600; color: var(--dsw-alias-label-primary); }
 
 /* The plan editor: grouped cards on the left, one document on the right. */
