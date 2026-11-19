@@ -230,7 +230,7 @@ const PROJECTS = {
   ok: true,
   dirs: ['C:\\cases'],
   registryFile: 'C:\\cases\\e2e.registry.yml',
-  creator: 'administor-',
+  creator: 'testuser',
   generatedAt: minutesAgo(1),
   warnings: [],
   projects: [
@@ -296,8 +296,8 @@ const SETTINGS = {
   ],
   dbSources: {
     ok: true,
-    file: 'C:\\Users\\administor-\\.dsh\\db-mcp\\datasources.json',
-    dir: 'C:\\Users\\administor-\\.dsh\\db-mcp',
+    file: 'C:\\Users\\testuser\\.dsh\\db-mcp\\datasources.json',
+    dir: 'C:\\Users\\testuser\\.dsh\\db-mcp',
     sources: [
       { id: 'iam-src', name: 'IAM', kind: 'postgresql', group: '', host: '127.0.0.1', port: 5432, database: 'iam_db', user: 'postgres', schema: 'public', usable: true },
       { id: 'legacy', name: 'Legacy', kind: 'mysql', group: '', host: '127.0.0.1', port: 3306, database: 'legacy', user: '', schema: '', usable: false },
@@ -437,7 +437,7 @@ const PAST_REPORT = {
         truncated: false,
       },
       logs: {
-        path: 'C:\\Users\\administor-\\.dsh\\e2e\\logs\\ij_run__RecordApplication.log',
+        path: 'C:\\Users\\testuser\\.dsh\\e2e\\logs\\ij_run__RecordApplication.log',
         traceId: 'trace-f81e3a9c0182',
         traceIdPresent: true,
         asserted: false,

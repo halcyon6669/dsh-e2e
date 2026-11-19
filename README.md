@@ -31,7 +31,7 @@
 ### 1. 装进 profile
 
 ```powershell
-plugin_manager install_bundle target="C:\Users\administor-\Documents\deepseek-harness\default-workspace\dsh-e2e"
+plugin_manager install_bundle target="C:\Users\<用户名>\Documents\deepseek-harness\default-workspace\dsh-e2e"
 ```
 
 插件第一次挂载时，如果用例目录是空的，会把 `examples/` 里的示例连同一个 `e2e.registry.yml` 一起复制进去——打开面板就有能点的东西，而不是一句「没有配置用例目录」。**已有文件永不覆盖**；显式配了 `config.caseDir` 时也不会往里写任何东西。
@@ -395,7 +395,7 @@ dump 语法上无损，信息上有损：注释、空行、引号风格、字段
 ## 开发
 
 ```powershell
-cd C:\Users\administor-\Documents\deepseek-harness\default-workspace\dsh-e2e
+cd C:\Users\<用户名>\Documents\deepseek-harness\default-workspace\dsh-e2e
 
 # 全部十二个套件（都不需要 IDE；registry 那套会读本机的 dsh-db-mcp 数据源，
 # browser 那套会用本机 Chrome/Edge 真跑页面，没装浏览器时明确跳过）

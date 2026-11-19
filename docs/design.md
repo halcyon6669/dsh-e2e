@@ -1314,7 +1314,7 @@ fatal: ReferenceError: index is not defined
 用户报的第四类 bug 只有半句话：「首页直接报错了。」截图里是四条黄条加一句空态：
 
 ```
-the registry could not be read: C:\Users\administor-\.dsh\e2e\cases\e2e.registry.yml: Invalid URL
+the registry could not be read: C:\Users\<用户名>\.dsh\e2e\cases\e2e.registry.yml: Invalid URL
 auth-confirm-code.yaml does not load: Invalid URL
 auth-register.yaml does not load: Invalid URL
 post-auth-confirmcode.yaml does not load: Invalid URL
@@ -1675,7 +1675,7 @@ console     ["Failed to load resource: the server responded with a status of 404
 
 ```
 GET /shot?path=C:\Windows\win.ini  →  403
-C:\Windows\win.ini is not inside C:\Users\administor-\.dsh\e2e\reports\shots;
+C:\Windows\win.ini is not inside C:\Users\<用户名>\.dsh\e2e\reports\shots;
 screenshots are only served from the report directory
 ```
 
@@ -1685,7 +1685,7 @@ screenshots are only served from the report directory
 
 用户报的是「控制台和数据库都没有数据」。截图里 Code 页签正常渲染整份 YAML，历史页签列了 7 条通过的运行——所以读取链路是好的。
 
-遍历 `C:\Users\administor-\.dsh\e2e\reports` 里全部 17 份报告之后，两个事实浮出来：
+遍历 `C:\Users\<用户名>\.dsh\e2e\reports` 里全部 17 份报告之后，两个事实浮出来：
 
 | 字段 | 实际情况 |
 |---|---|
